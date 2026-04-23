@@ -1,0 +1,193 @@
+.container {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.backButton {
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.backButton:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.headerTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.main {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-family: 'Space Mono', monospace;
+}
+
+.required {
+  color: var(--accent);
+}
+
+.input {
+  width: 100%;
+  padding: 12px 16px;
+}
+
+.textarea {
+  width: 100%;
+  padding: 12px 16px;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.saveButton {
+  background: var(--accent);
+  color: #111111;
+  font-weight: 700;
+  padding: 10px 24px;
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.saveButton:hover {
+  background: var(--accent-hover);
+}
+
+.saveButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cancelButton {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.cancelButton:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+/* ── Nota Google Ads en formulario de creación ── */
+
+.googleAdsNote {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+/* ── Sección cuentas publicitarias ── */
+
+.accountsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.accountsSectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-family: 'Space Mono', monospace;
+}
+
+.accountsHint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.accountsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accountCard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.accountCard:hover {
+  border-color: var(--border-hover);
+}
+
+.accountCardSelected {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.accountName {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.accountMeta {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'Space Mono', monospace;
+}
