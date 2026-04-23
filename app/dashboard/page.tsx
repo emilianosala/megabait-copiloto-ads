@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import styles from './dashboard.module.css';
@@ -11,7 +11,7 @@ interface Client {
   industry: string;
 }
 
-export default function Dashboard() {
+function DashboardContent() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
@@ -141,5 +141,13 @@ export default function Dashboard() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={<div className={styles.loading}>Cargando...</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
