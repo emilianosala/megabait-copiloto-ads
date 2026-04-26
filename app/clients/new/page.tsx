@@ -125,8 +125,8 @@ export default function NewClientPage() {
             />
           </div>
           <div className={styles.googleAdsNote}>
-            Podrás vincular una cuenta de Google Ads después de crear el cliente,
-            desde la sección de edición.
+            Podrás vincular cuentas de Google Ads y Meta Ads después de crear el
+            cliente, desde la sección de edición.
           </div>
 
           <div className={styles.actions}>

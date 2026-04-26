@@ -15,6 +15,7 @@ function DashboardContent() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -34,6 +35,10 @@ function DashboardContent() {
     fetch('/api/google/status')
       .then((res) => res.json())
       .then((data) => setGoogleConnected(data.connected));
+
+    fetch('/api/meta/status')
+      .then((res) => res.json())
+      .then((data) => setMetaConnected(data.connected));
   }, []);
 
   // Leer el query param ?google= que deja el callback de OAuth
@@ -48,6 +53,15 @@ function DashboardContent() {
       router.replace('/dashboard');
     } else if (googleParam === 'no_refresh_token') {
       alert('Google no emitió un refresh token. Intentá desconectar la app desde tu cuenta de Google y volvé a conectar.');
+      router.replace('/dashboard');
+    }
+
+    const metaParam = searchParams.get('meta');
+    if (metaParam === 'connected') {
+      setMetaConnected(true);
+      router.replace('/dashboard');
+    } else if (metaParam === 'error') {
+      alert('Error al conectar Meta Ads. Intentá de nuevo.');
       router.replace('/dashboard');
     }
   }, [searchParams, router]);
@@ -70,6 +84,17 @@ function DashboardContent() {
             <div className={styles.googleConnected}>
               <span className={styles.googleDot} />
               Google Ads conectado
+            </div>
+          )}
+          {metaConnected === false && (
+            <a href="/api/meta/auth" className={styles.metaButton}>
+              Conectar Meta Ads
+            </a>
+          )}
+          {metaConnected === true && (
+            <div className={styles.metaConnected}>
+              <span className={styles.metaDot} />
+              Meta Ads conectado
             </div>
           )}
           <button className={styles.logoutButton} onClick={handleLogout}>

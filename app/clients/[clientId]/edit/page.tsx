@@ -4,19 +4,29 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import styles from '../../client-form.module.css';
 
-interface Account {
+interface GoogleAccount {
   id: string;
   name: string;
   currency: string | null;
   is_manager: boolean;
 }
 
+interface MetaAccount {
+  id: string;
+  name: string;
+  currency: string;
+  account_status: number;
+}
+
 export default function EditClientPage() {
   const { clientId } = useParams();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [accounts, setAccounts] = useState<Account[] | null>(null);
+  const [accounts, setAccounts] = useState<GoogleAccount[] | null>(null);
   const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
+  const [metaAccounts, setMetaAccounts] = useState<MetaAccount[] | null>(null);
+  const [metaAccountsError, setMetaAccountsError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
     industry: '',
@@ -26,6 +36,7 @@ export default function EditClientPage() {
     kpis: '',
     restrictions: '',
     google_ads_account_id: '',
+    meta_ads_account_id: '',
   });
 
   useEffect(() => {
@@ -41,6 +52,7 @@ export default function EditClientPage() {
           kpis: data.kpis ?? '',
           restrictions: data.restrictions ?? '',
           google_ads_account_id: data.google_ads_account_id ?? '',
+          meta_ads_account_id: data.meta_ads_account_id ?? '',
         }),
       );
 
@@ -54,6 +66,24 @@ export default function EditClientPage() {
         }
       })
       .catch(() => setAccountsError('Error al cargar cuentas'));
+
+    fetch('/api/meta/status')
+      .then((res) => res.json())
+      .then((data) => {
+        setMetaConnected(data.connected);
+        if (data.connected) {
+          fetch('/api/meta/accounts')
+            .then((res) => res.json())
+            .then((accounts) => {
+              if (accounts.error) {
+                setMetaAccountsError(accounts.error);
+              } else {
+                setMetaAccounts(accounts);
+              }
+            })
+            .catch(() => setMetaAccountsError('Error al cargar cuentas de Meta'));
+        }
+      });
   }, [clientId]);
 
   const handleChange = (
@@ -163,7 +193,7 @@ export default function EditClientPage() {
             />
           </div>
 
-          {/* ── Sección cuentas publicitarias ── */}
+          {/* ── Sección Google Ads ── */}
           <div className={styles.accountsSection}>
             <p className={styles.accountsSectionTitle}>Cuenta de Google Ads</p>
 
@@ -191,7 +221,6 @@ export default function EditClientPage() {
 
             {accounts && accounts.length > 0 && (
               <div className={styles.accountsList}>
-                {/* Opción para desvincular */}
                 <button
                   type="button"
                   className={`${styles.accountCard} ${!form.google_ads_account_id ? styles.accountCardSelected : ''}`}
@@ -219,6 +248,63 @@ export default function EditClientPage() {
                       ]
                         .filter(Boolean)
                         .join(' · ')}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Sección Meta Ads ── */}
+          <div className={styles.accountsSection}>
+            <p className={styles.accountsSectionTitle}>Cuenta de Meta Ads</p>
+
+            {metaConnected === false && (
+              <p className={styles.accountsHint}>
+                Conectá Meta Ads desde el dashboard para poder vincular una cuenta.
+              </p>
+            )}
+
+            {metaConnected === true && !metaAccounts && !metaAccountsError && (
+              <p className={styles.accountsHint}>Cargando cuentas...</p>
+            )}
+
+            {metaAccountsError && (
+              <p className={styles.accountsHint}>
+                No se pudieron cargar las cuentas. Verificá que el token de Meta esté vigente.
+              </p>
+            )}
+
+            {metaAccounts && metaAccounts.length === 0 && (
+              <p className={styles.accountsHint}>
+                No se encontraron cuentas de Meta Ads accesibles con tu token.
+              </p>
+            )}
+
+            {metaAccounts && metaAccounts.length > 0 && (
+              <div className={styles.accountsList}>
+                <button
+                  type="button"
+                  className={`${styles.accountCard} ${!form.meta_ads_account_id ? styles.accountCardSelected : ''}`}
+                  onClick={() => setForm((prev) => ({ ...prev, meta_ads_account_id: '' }))}
+                >
+                  <span className={styles.accountName}>Sin vincular</span>
+                </button>
+
+                {metaAccounts.map((account) => (
+                  <button
+                    key={account.id}
+                    type="button"
+                    className={`${styles.accountCard} ${form.meta_ads_account_id === account.id ? styles.accountCardSelected : ''}`}
+                    onClick={() =>
+                      setForm((prev) => ({ ...prev, meta_ads_account_id: account.id }))
+                    }
+                  >
+                    <span className={styles.accountName}>
+                      {account.name} ({account.id})
+                    </span>
+                    <span className={styles.accountMeta}>
+                      {account.currency}
                     </span>
                   </button>
                 ))}
