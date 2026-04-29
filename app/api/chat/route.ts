@@ -2,6 +2,7 @@ import { anthropic } from '@/lib/anthropic';
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createGoogleAdsClient } from '@/lib/google-ads';
 import { NextResponse } from 'next/server';
+import { getAccountInsights } from '@/lib/meta-ads';
 
 interface MetricRow {
   metrics: {
@@ -39,7 +40,15 @@ async function fetchGoogleAdsMetrics(
     if (!rows.length) return null;
 
     const totals = rows.reduce(
-      (acc: { impressions: number; clicks: number; cost: number; conversions: number }, row: MetricRow) => ({
+      (
+        acc: {
+          impressions: number;
+          clicks: number;
+          cost: number;
+          conversions: number;
+        },
+        row: MetricRow,
+      ) => ({
         impressions: acc.impressions + (row.metrics.impressions ?? 0),
         clicks: acc.clicks + (row.metrics.clicks ?? 0),
         cost: acc.cost + (row.metrics.cost_micros ?? 0) / 1_000_000,
@@ -68,11 +77,50 @@ async function fetchGoogleAdsMetrics(
   }
 }
 
+async function fetchMetaAdsMetrics(
+  adAccountId: string,
+  accessToken: string,
+): Promise<string | null> {
+  try {
+    const insights = await getAccountInsights(
+      accessToken,
+      adAccountId,
+      'impressions,clicks,spend,ctr,cpc,reach,actions',
+      'last_30d',
+    );
+
+    if (!insights) return null;
+
+    const conversions =
+      insights.actions
+        ?.filter(
+          (a) =>
+            a.action_type === 'offsite_conversion.fb_pixel_purchase' ||
+            a.action_type === 'purchase',
+        )
+        ?.reduce((acc, a) => acc + parseFloat(a.value), 0) ?? 0;
+
+    return `MÉTRICAS REALES DE META ADS (últimos 30 días):
+- Impresiones: ${parseInt(insights.impressions).toLocaleString('es-AR')}
+- Alcance: ${parseInt(insights.reach).toLocaleString('es-AR')}
+- Clics: ${parseInt(insights.clicks).toLocaleString('es-AR')}
+- Gasto total: $${parseFloat(insights.spend).toFixed(2)}
+- CTR: ${parseFloat(insights.ctr).toFixed(2)}%
+- CPC promedio: $${parseFloat(insights.cpc).toFixed(2)}
+- Conversiones (compras): ${conversions.toFixed(0)}`;
+  } catch (err) {
+    console.error('[Meta Ads] Error al obtener métricas:', err);
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   const { clientId, message, history } = await request.json();
   const supabase = await createSupabaseServer();
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
@@ -85,7 +133,10 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !client) {
-    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
+    return NextResponse.json(
+      { error: 'Cliente no encontrado' },
+      { status: 404 },
+    );
   }
 
   // Pullear métricas reales si el cliente tiene cuenta de Google Ads vinculada
@@ -104,6 +155,24 @@ export async function POST(request: Request) {
       );
       if (metrics) {
         metricsBlock = `\n\n${metrics}\n\nUsá estos datos reales como base para tu análisis.`;
+      }
+    }
+  }
+
+  if (client.meta_ads_account_id) {
+    const { data: metaConnection } = await supabase
+      .from('meta_connections')
+      .select('access_token')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (metaConnection) {
+      const metaMetrics = await fetchMetaAdsMetrics(
+        client.meta_ads_account_id,
+        metaConnection.access_token,
+      );
+      if (metaMetrics) {
+        metricsBlock += `\n\n${metaMetrics}\n\nUsá estos datos reales como base para tu análisis.`;
       }
     }
   }
@@ -134,7 +203,12 @@ Tu función es ayudar a gestionar campañas de pauta considerando siempre el con
   // Guardar mensajes en Supabase
   await supabase.from('conversations').insert([
     { client_id: clientId, user_id: user.id, role: 'user', content: message },
-    { client_id: clientId, user_id: user.id, role: 'assistant', content: assistantMessage },
+    {
+      client_id: clientId,
+      user_id: user.id,
+      role: 'assistant',
+      content: assistantMessage,
+    },
   ]);
 
   return NextResponse.json({ response: assistantMessage });
