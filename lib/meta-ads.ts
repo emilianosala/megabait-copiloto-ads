@@ -36,11 +36,18 @@ export async function getAccountInsights(
   accessToken: string,
   adAccountId: string,
   fields: string = 'impressions,clicks,spend,ctr,cpc,reach,actions',
-  datePreset: string = 'last_30d'
+  datePreset: string = 'last_30d',
+  timeRange?: { since: string; until: string },
 ): Promise<MetaInsights | null> {
-  const res = await fetch(
-    `${META_API_BASE}/${adAccountId}/insights?fields=${fields}&date_preset=${datePreset}&access_token=${accessToken}`
-  );
+  const params = new URLSearchParams({ fields, access_token: accessToken });
+
+  if (timeRange) {
+    params.append('time_range', JSON.stringify(timeRange));
+  } else {
+    params.append('date_preset', datePreset);
+  }
+
+  const res = await fetch(`${META_API_BASE}/${adAccountId}/insights?${params.toString()}`);
   const data = await res.json();
 
   if (!res.ok || data.error) {
@@ -52,10 +59,17 @@ export async function getAccountInsights(
 
 export async function getCampaigns(
   accessToken: string,
-  adAccountId: string
+  adAccountId: string,
+  insightFields: string = 'impressions,clicks,spend,ctr,cpc',
+  datePreset: string = 'last_30d',
+  timeRange?: { since: string; until: string },
 ): Promise<any[]> {
+  const dateParam = timeRange
+    ? `time_range=${encodeURIComponent(JSON.stringify(timeRange))}`
+    : `date_preset=${datePreset}`;
+
   const res = await fetch(
-    `${META_API_BASE}/${adAccountId}/campaigns?fields=id,name,status,objective,daily_budget,lifetime_budget&access_token=${accessToken}`
+    `${META_API_BASE}/${adAccountId}/campaigns?fields=id,name,status,objective,insights.fields(${insightFields}).${dateParam}&access_token=${accessToken}`
   );
   const data = await res.json();
 
