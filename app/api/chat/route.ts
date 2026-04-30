@@ -152,69 +152,84 @@ async function executeMetaTool(
   adAccountId: string,
   accessToken: string,
 ): Promise<string> {
-  const timeRange =
-    toolInput.since && toolInput.until
-      ? { since: toolInput.since, until: toolInput.until }
-      : undefined;
-  const datePreset = toolInput.date_preset || 'last_30d';
+  // Siempre retorna string — nunca propaga excepciones al loop de tool use.
+  // Si algo falla, Claude recibe el mensaje de error y puede responderle al usuario.
+  try {
+    const timeRange =
+      toolInput.since && toolInput.until
+        ? { since: toolInput.since, until: toolInput.until }
+        : undefined;
+    const datePreset = toolInput.date_preset || 'last_30d';
 
-  if (toolName === 'get_meta_account_insights') {
-    const insights = await getAccountInsights(
-      accessToken,
-      adAccountId,
-      'impressions,clicks,spend,ctr,cpc,reach,actions',
-      datePreset,
-      timeRange,
-    );
+    if (toolName === 'get_meta_account_insights') {
+      const insights = await getAccountInsights(
+        accessToken,
+        adAccountId,
+        'impressions,clicks,spend,ctr,cpc,reach,actions',
+        datePreset,
+        timeRange,
+      );
 
-    if (!insights) return 'No hay datos disponibles para el período seleccionado.';
+      if (!insights) return 'No hay datos disponibles para el período seleccionado.';
 
-    const conversions =
-      insights.actions
-        ?.filter(
-          (a) =>
-            a.action_type === 'offsite_conversion.fb_pixel_purchase' ||
-            a.action_type === 'purchase',
-        )
-        ?.reduce((acc, a) => acc + parseFloat(a.value), 0) ?? 0;
+      const conversions =
+        insights.actions
+          ?.filter(
+            (a) =>
+              a.action_type === 'offsite_conversion.fb_pixel_purchase' ||
+              a.action_type === 'purchase',
+          )
+          ?.reduce((acc, a) => acc + parseFloat(a.value), 0) ?? 0;
 
+      return JSON.stringify({
+        periodo: timeRange ? `${toolInput.since} al ${toolInput.until}` : datePreset,
+        impresiones: parseInt(insights.impressions),
+        alcance: parseInt(insights.reach),
+        clics: parseInt(insights.clicks),
+        gasto_usd: parseFloat(insights.spend).toFixed(2),
+        ctr_porcentaje: parseFloat(insights.ctr).toFixed(2),
+        cpc_usd: parseFloat(insights.cpc).toFixed(2),
+        conversiones_compras: conversions.toFixed(0),
+      });
+    }
+
+    if (toolName === 'get_meta_campaigns') {
+      console.log(
+        `[Meta Tool] get_meta_campaigns - datePreset: ${datePreset}, timeRange: ${JSON.stringify(timeRange)}`,
+      );
+
+      const campaigns = await getCampaigns(
+        accessToken,
+        adAccountId,
+        'impressions,clicks,spend,ctr,cpc',
+        datePreset,
+        timeRange,
+      );
+
+      console.log(`[Meta Tool] get_meta_campaigns - ${campaigns.length} campañas recibidas`);
+
+      if (!campaigns.length) return 'No hay campañas disponibles para el período seleccionado.';
+
+      const result = campaigns.map((c) => ({
+        nombre: c.name,
+        estado: c.status,
+        objetivo: c.objective,
+        impresiones: parseInt(c.insights?.data?.[0]?.impressions ?? '0'),
+        clics: parseInt(c.insights?.data?.[0]?.clicks ?? '0'),
+        gasto_usd: parseFloat(c.insights?.data?.[0]?.spend ?? '0').toFixed(2),
+        ctr: parseFloat(c.insights?.data?.[0]?.ctr ?? '0').toFixed(2),
+      }));
+
+      return JSON.stringify(result);
+    }
+
+    return 'Tool no reconocida.';
+  } catch (err: any) {
+    console.error(`[Meta Tool] Error en ${toolName}:`, err);
     return JSON.stringify({
-      periodo: timeRange ? `${toolInput.since} al ${toolInput.until}` : datePreset,
-      impresiones: parseInt(insights.impressions),
-      alcance: parseInt(insights.reach),
-      clics: parseInt(insights.clicks),
-      gasto_usd: parseFloat(insights.spend).toFixed(2),
-      ctr_porcentaje: parseFloat(insights.ctr).toFixed(2),
-      cpc_usd: parseFloat(insights.cpc).toFixed(2),
-      conversiones_compras: conversions.toFixed(0),
+      error: err.message || 'Error desconocido al consultar Meta Ads',
     });
   }
-
-  if (toolName === 'get_meta_campaigns') {
-    const campaigns = await getCampaigns(
-      accessToken,
-      adAccountId,
-      'impressions,clicks,spend,ctr,cpc',
-      datePreset,
-      timeRange,
-    );
-
-    if (!campaigns.length) return 'No hay campañas disponibles para el período seleccionado.';
-
-    const result = campaigns.map((c) => ({
-      nombre: c.name,
-      estado: c.status,
-      objetivo: c.objective,
-      impresiones: parseInt(c.insights?.data?.[0]?.impressions ?? '0'),
-      clics: parseInt(c.insights?.data?.[0]?.clicks ?? '0'),
-      gasto_usd: parseFloat(c.insights?.data?.[0]?.spend ?? '0').toFixed(2),
-      ctr: parseFloat(c.insights?.data?.[0]?.ctr ?? '0').toFixed(2),
-    }));
-
-    return JSON.stringify(result);
-  }
-
-  return 'Tool no reconocida.';
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────────

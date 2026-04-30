@@ -64,14 +64,31 @@ export async function getCampaigns(
   datePreset: string = 'last_30d',
   timeRange?: { since: string; until: string },
 ): Promise<any[]> {
-  const dateParam = timeRange
-    ? `time_range=${encodeURIComponent(JSON.stringify(timeRange))}`
-    : `date_preset=${datePreset}`;
+  // Sintaxis correcta de field expansion de la Graph API:
+  //   insights.date_preset(last_30d){impressions,clicks,...}
+  //   insights.time_range({"since":"...","until":"..."}){impressions,clicks,...}
+  const dateFilter = timeRange
+    ? `insights.time_range(${JSON.stringify(timeRange)}){${insightFields}}`
+    : `insights.date_preset(${datePreset}){${insightFields}}`;
 
-  const res = await fetch(
-    `${META_API_BASE}/${adAccountId}/campaigns?fields=id,name,status,objective,insights.fields(${insightFields}).${dateParam}&access_token=${accessToken}`
-  );
+  const params = new URLSearchParams({
+    fields: `id,name,status,objective,${dateFilter}`,
+    access_token: accessToken,
+  });
+
+  const url = `${META_API_BASE}/${adAccountId}/campaigns?${params.toString()}`;
+
+  // Log de debug — ocultar el token
+  console.log('[Meta Ads] getCampaigns URL:', url.replace(accessToken, '[TOKEN]'));
+
+  // Timeout de 30 s para evitar que el loop de tool use quede colgado
+  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
   const data = await res.json();
+
+  console.log(
+    '[Meta Ads] getCampaigns raw response:',
+    JSON.stringify(data).slice(0, 600),
+  );
 
   if (!res.ok || data.error) {
     throw new Error(data.error?.message || 'Error al obtener campañas de Meta Ads');
