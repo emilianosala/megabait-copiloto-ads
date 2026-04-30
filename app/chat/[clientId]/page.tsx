@@ -24,6 +24,8 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     fetch(`/api/clients/${clientId}`)
@@ -39,29 +41,101 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Auto-resize del textarea según el contenido
+  const resizeTextarea = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    resizeTextarea();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+    // Shift+Enter: comportamiento default del textarea (nueva línea)
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
 
-    const userMessage: Message = { role: 'user', content: input };
+    const trimmedInput = input.trim();
+    const userMessage: Message = { role: 'user', content: trimmedInput };
+
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     setLoading(true);
 
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId, message: input, history: messages }),
-    });
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-    const data = await res.json();
-    setMessages((prev) => [
-      ...prev,
-      { role: 'assistant', content: data.response },
-    ]);
-    setLoading(false);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId,
+          message: trimmedInput,
+          history: messages,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error('Error en la respuesta del servidor');
+      }
+
+      // Agregar mensaje vacío del asistente — se irá llenando con los chunks
+      setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            role: 'assistant',
+            content: updated[updated.length - 1].content + chunk,
+          };
+          return updated;
+        });
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        // El usuario detuvo el stream — el mensaje parcial queda visible
+      } else {
+        console.error('[chat] Error:', err);
+      }
+    } finally {
+      setLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStop = () => {
+    abortControllerRef.current?.abort();
   };
 
   if (!client) return <div className={styles.container} />;
+
+  const lastMessageIsUser =
+    messages.length === 0 || messages[messages.length - 1].role === 'user';
 
   return (
     <div className={styles.container}>
@@ -103,27 +177,40 @@ export default function ChatPage() {
             </div>
           ))
         )}
-        {loading && <p className={styles.typing}>Escribiendo...</p>}
+
+        {/* Indicador de escritura: solo mientras espera el primer chunk */}
+        {loading && lastMessageIsUser && (
+          <p className={styles.typing}>Escribiendo...</p>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
       <div className={styles.inputArea}>
         <div className={styles.inputWrapper}>
-          <input
+          <textarea
+            ref={textareaRef}
             className={styles.input}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder={`Preguntale algo sobre ${client.name}...`}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={`Preguntale algo sobre ${client.name}... (Shift+Enter para nueva línea)`}
             disabled={loading}
+            rows={1}
           />
-          <button
-            className={styles.sendButton}
-            onClick={sendMessage}
-            disabled={loading}
-          >
-            Enviar
-          </button>
+          {loading ? (
+            <button className={styles.stopButton} onClick={handleStop}>
+              Detener
+            </button>
+          ) : (
+            <button
+              className={styles.sendButton}
+              onClick={sendMessage}
+              disabled={!input.trim()}
+            >
+              Enviar
+            </button>
+          )}
         </div>
       </div>
     </div>

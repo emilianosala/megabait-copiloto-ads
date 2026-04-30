@@ -349,16 +349,34 @@ Tu función es ayudar a gestionar campañas de pauta considerando siempre el con
     }
   }
 
-  // Guardar mensajes en Supabase
-  await supabase.from('conversations').insert([
-    { client_id: clientId, user_id: user.id, role: 'user', content: message },
-    {
-      client_id: clientId,
-      user_id: user.id,
-      role: 'assistant',
-      content: assistantMessage,
-    },
-  ]);
+  // Streaming: enviar assistantMessage en chunks palabra por palabra.
+  // Supabase se guarda al finalizar el stream (cuando el cliente haya recibido todo).
+  const encoder = new TextEncoder();
 
-  return NextResponse.json({ response: assistantMessage });
+  const stream = new ReadableStream({
+    async start(controller) {
+      const words = assistantMessage.split(' ');
+      for (let i = 0; i < words.length; i++) {
+        const chunk = i < words.length - 1 ? words[i] + ' ' : words[i];
+        controller.enqueue(encoder.encode(chunk));
+        await new Promise((r) => setTimeout(r, 18));
+      }
+
+      // Guardar en Supabase una vez que se enviaron todos los chunks
+      await supabase.from('conversations').insert([
+        { client_id: clientId, user_id: user.id, role: 'user', content: message },
+        { client_id: clientId, user_id: user.id, role: 'assistant', content: assistantMessage },
+      ]);
+
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }
