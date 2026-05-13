@@ -7,13 +7,77 @@
 - Anthropic API (Claude Sonnet)
 - Deploy: Vercel → ads.megabait.com.ar
 
+---
+
 ## Marco estratégico
 
-Esto es un **SaaS para agencias y analistas**, no una herramienta personal. La existencia de los MCPs oficiales de Google Ads (oct/2025) y Meta Ads (29/abr/2026) **no compiten con tu producto** — compiten con la capa de "API access" que vos podrías delegar en ellos.
+Esto es un **SaaS para agencias y analistas**, no una herramienta personal. La existencia de los MCPs oficiales de Google Ads (oct/2025) y Meta Ads (29/abr/2026) **no compiten con el producto** — compiten con la capa de "API access" que podemos delegar en ellos.
 
-Tu valor no es el acceso a las APIs. Tu valor es: contexto persistente por cliente, criterio analítico codificado en el prompt, multi-tenant, history conversacional, cruce con datos de ventas reales, y action approval. Eso ningún MCP te lo da.
+Pero algo más importante cambió en 2025-2026: **Meta empezó a banear cuentas que se conectan a MCPs no oficiales o que disparan patrones de automatización agresivos.** Los baneos son permanentes, el canal de apelación es opaco, y los agency operators están aterrados — con razón. Eso abrió un diferencial específico, medible y poco ocupado:
 
-Regla mental: cada decisión técnica debe responder "¿esto agrega a la capa de producto, o reinvento plomería que un MCP ya hace?"
+### El positioning del producto
+
+> **"La forma segura de poner IA sobre tus cuentas de Meta y Google. Multi-cliente. Con criterio analítico. Sin que te baneen."**
+
+Cada decisión técnica, de copy, de roadmap, debe pasar por el filtro: *¿esto refuerza o debilita la posición "Safe MCP"?*
+
+---
+
+## Pilares del producto
+
+Cinco pilares que cualquier decisión de roadmap debería reforzar:
+
+1. **Safe-MCP infrastructure** — solo MCPs oficiales, rate limiting backend, audit log, AI Content Label automático, action approval gates como requisito arquitectónico. Es **el moat principal**.
+2. **Multi-tenant para agencias** — varios analistas trabajando los mismos clientes con contexto y historia compartidos. Claude Code + MCP es one-user-one-machine; tu producto no.
+3. **Criterio analítico codificado** — system prompt nivel analista senior con principios estadísticos, atribución, posicionamiento Megabait. Diferencial frente a "Claude Desktop genérico".
+4. **Cruce con datos de ventas reales** — ROAS verdadero independiente de las ventanas de atribución de cada plataforma. Ningún MCP de plataforma te lo da.
+5. **Action approval gates** — nunca ejecución automática. Cada cambio en cuenta requiere aprobación humana explícita. Esto es UX **y** safety.
+
+Cualquier pieza individual se puede copiar. El stack completo es mucho más difícil de clonar.
+
+---
+
+## Inteligencia de plataforma — Cómo nos mantenemos al día
+
+Las reglas del juego cambian seguido. Para sostener la posición "Safe-MCP" hay que estar al tanto de novedades de Google, Meta y Anthropic — cambios en MCPs oficiales, ban waves nuevas, requisitos de disclosure, cambios de rate limits, etc.
+
+### Fuentes a monitorear (cadencia semanal)
+
+**Meta:**
+- [Meta for Developers — Changelog](https://developers.facebook.com/docs/graph-api/changelog/)
+- [Meta for Business Newsroom](https://www.facebook.com/business/news)
+- [Meta Marketing API release notes](https://developers.facebook.com/docs/marketing-api/release-notes/)
+- Repo oficial Meta Ads MCP (cuando esté público) y su issues tab
+
+**Google:**
+- [Google Ads Developer Blog](https://ads-developers.googleblog.com/)
+- [Google Ads API release notes](https://developers.google.com/google-ads/api/docs/release-notes)
+- [Repo `google-marketing-solutions/google_ads_mcp`](https://github.com/google-marketing-solutions/google_ads_mcp) — issues + releases
+- Google Analytics MCP docs y changelog
+
+**Anthropic / MCP spec:**
+- [Anthropic news](https://www.anthropic.com/news)
+- MCP specification repo (issues + RFCs)
+- Cambios en el SDK relevantes para MCP servers remotos
+
+**Industria / incidentes:**
+- DTC Skills, HyperFX, Supermetrics, AdAdvisor — blogs que trackean ban waves
+- Cuentas como Cody Schneider (@codyschneiderxx) y otros agency operators en X que reportan baneos
+- r/PPC, r/FacebookAds — para detectar señales tempranas
+
+### Cadencia
+
+- **Semanal (viernes, 30 min):** revisar las fuentes anteriores, anotar cambios relevantes
+- **Inmediato:** cualquier novedad sobre baneos o cambios de policy se evalúa al toque y se traduce a acciones de producto si aplica
+
+### Dónde registrar lo encontrado
+
+- Crear y mantener `MCP-INTEL.md` en el repo con entradas fechadas: qué cambió, fuente, impacto en nuestro producto, acción decidida
+- Cuando un cambio implique tarea concreta → se agrega como issue o se incorpora al ROADMAP
+
+### Automatización futura
+
+Eventualmente: un **scheduled Claude agent** que cada lunes a la mañana hace el resumen automático de la semana (lee las fuentes, identifica cambios, manda un email/notificación con el resumen). Lo dejamos pendiente hasta que el flujo manual esté validado.
 
 ---
 
@@ -82,14 +146,14 @@ Orden de rotación, de mayor a menor riesgo:
 
 ## ⏳ Bloqueantes externos
 
-- **Google Ads Developer Token**: rechazado por uso de Gmail. Pendiente configurar email corporativo `@megabait.com.ar` (Google Workspace o Zoho Mail) y reaplicar. **Menos crítico ahora** — si migrás a usar el Google Ads MCP oficial para análisis (read-only), el Developer Token solo lo necesitás para escribir.
+- **Google Ads Developer Token**: rechazado por uso de Gmail. Pendiente configurar email corporativo `@megabait.com.ar` (Google Workspace o Zoho Mail) y reaplicar. **Menos crítico ahora** — si delegamos análisis en el MCP oficial de Google Ads (read-only), el Developer Token solo se necesita para escribir, lo cual está bloqueado para todos hoy (ni MCP ni nadie soporta write en Google Ads sin token aprobado).
 - **Email corporativo**: necesario para reaplicar al Developer Token y actualizar Privacy Policy + Terms.
 
 ---
 
 ## 📋 P1 — System prompt rediseñado
 
-Convertir el agente de "chat con contexto" a "analista senior de marketing digital con criterio Megabait". **Este es tu moat más grande junto con P2** — cuando un competidor pueda hacer un MVP en una tarde con MCPs + Claude Desktop, lo que separa tu producto del de él es el criterio analítico que codifiques acá.
+Convertir el agente de "chat con contexto" a "analista senior de marketing digital con criterio Megabait". **Es el pilar #3 (criterio analítico codificado).**
 
 ### Personalidad
 - Analista senior con criterio propio
@@ -106,11 +170,17 @@ Convertir el agente de "chat con contexto" a "analista senior de marketing digit
 - **Distinguir métricas de vanidad** (likes, alcance) de **métricas de negocio** (ROAS, CPA, ingresos)
 - **No consolidar ad sets sin entender si hay tests de audiencia en curso**
 
+### Principios safe-by-default (alineados con P3)
+- **Nunca proponer cambios masivos** (más de N en pocos minutos). Si se requiere, fraccionarlo en el tiempo.
+- **Nunca proponer ejecución directa** — siempre pasar por aprobación humana.
+- **Declarar contenido AI-generado** cuando proponga copy o creatividades.
+- **Respetar rate limits documentados** de cada plataforma cuando recomiende cadencia de pruebas.
+
 ### Posicionamiento Megabait
 - Visión cross-platform neutral: ni Google ni Meta, ve el journey completo
 - Mide con las reglas del anunciante, no las de la plataforma
 - Las herramientas nativas tienen perspectiva parcial por diseño
-- Diferencial vs Madgicx, Birdeye, Triple Whale: contexto profundo del negocio + criterio analítico + neutralidad de plataforma
+- Diferencial vs Madgicx, Birdeye, Triple Whale: contexto profundo del negocio + criterio analítico + neutralidad de plataforma + **safety**
 
 ### Comportamiento esperado
 - Datos anómalos → preguntar contexto antes de diagnosticar
@@ -120,9 +190,9 @@ Convertir el agente de "chat con contexto" a "analista senior de marketing digit
 
 ---
 
-## 📋 P2 — Datos de ventas (tu diferencial más grande)
+## 📋 P2 — Datos de ventas (pilar #4)
 
-**Por qué subió de prioridad:** ningún MCP de plataforma te lo da. Es información del negocio del cliente, no de las plataformas. Es lo que permite el discurso "Meta dice $7k, Google dice $6k, en realidad facturaste $10k — hay $3k de solapamiento". Es lo que justifica que el cliente te pague mensual.
+**Por qué es de los items más importantes:** ningún MCP de plataforma te lo da. Es información del negocio del cliente, no de las plataformas. Es lo que permite el discurso "Meta dice $7k, Google dice $6k, en realidad facturaste $10k — hay $3k de solapamiento". Es lo que justifica que el cliente te pague mensual.
 
 ### Implementación por fases
 1. **Fase 1: CSV upload** — universal, simple, funciona con cualquier negocio
@@ -135,36 +205,67 @@ Convertir el agente de "chat con contexto" a "analista senior de marketing digit
 
 ---
 
-## 📋 P3 — Billing y suscripciones
+## 📋 P3 — Safe-MCP infrastructure (EL CORAZÓN DEL PRODUCTO)
 
-Sin esto no es SaaS, es proyecto.
+Construir la infraestructura que hace que tu producto sea **demostrable y vendiblemente más seguro** que conectar Claude Code a un MCP comunitario. Sin esto, el positioning de la home no es defendible.
 
-- Stripe o Lemon Squeezy
-- Pricing tentativo: por cliente/mes (ej: $30/cliente con tope de N consultas), o por agencia con tope de clientes
-- Trial de 14 días
-- Webhook → Supabase para gating de features según plan
+### Componentes
+
+**(a) Solo MCPs oficiales**
+- Política explícita y documentada: nunca conectarse a community MCPs ni a scrapers.
+- Para Meta: MCP oficial (mcp.facebook.com/ads) o Marketing API directa via Business App propia aprobada.
+- Para Google: MCP oficial (`google-marketing-solutions/google_ads_mcp`) o Google Ads API con Developer Token propio.
+- Para GA4: MCP oficial.
+- Cuando un usuario conecta, mostrar explícitamente "conectado via MCP oficial de Meta" — es parte del producto, no detalle interno.
+
+**(b) Rate limiting backend**
+- Tu servidor serializa los calls con spacing apropiado.
+- Si el agente intenta cambios masivos (ej: pausar 20 ad sets en 1 min), tu backend los espacia.
+- El usuario nunca dispara directamente — todo pasa por una cola con control de cadencia.
+- Implementación: middleware delante de toda llamada a Meta/Google APIs. Tabla `api_call_queue` o uso de Vercel Queues.
+
+**(c) AI Content Label automático**
+- Cuando el agente proponga copy o creatividades nuevas, el sistema marca `is_ai_generated: true` automáticamente.
+- Si el flow es "publicar", se aplica el label de Meta antes de enviar.
+- Si por alguna razón no se puede aplicar el label, **no se publica**.
+
+**(d) Action approval gates**
+- Hard requirement arquitectónico: ninguna escritura a Meta/Google API se ejecuta sin un click humano explícito.
+- El agente puede *proponer*. Nunca ejecuta directo.
+- El gate se enforza en el backend, no solo en la UI — si el frontend tiene un bug, el backend igual bloquea.
+
+**(e) Audit log**
+- Cada call a Meta/Google API queda registrado: timestamp, user_id, client_id, endpoint, payload (sanitizado), response, resultado.
+- Tabla `api_audit_log` con retención larga (12+ meses).
+- Sirve para: debugging, compliance, y especialmente **evidencia de apelación si Meta llegara a banear** (poder mostrar "miren, nuestros patterns son razonables, acá está el log").
+
+**(f) Business Manager system users donde se pueda**
+- Para casos B2B donde la agencia gestiona N cuentas: usar System Users (server-to-server) en vez de OAuth de usuario.
+- Más estable, no se rompe cuando una persona se va de la agencia.
+- Requiere Business Manager aprobado del lado del cliente.
+
+**(g) Documentación de safety posture**
+- Página `/security` o `/safety` en el marketing site con todo esto explicado en lenguaje claro.
+- Es **producto**, no solo trust. Vende.
+
+### Cómo se traduce en código (orden sugerido)
+1. Audit log primero — barato, alto valor, base para todo lo demás.
+2. Action approval gates en backend — antes de implementar P4.
+3. Rate limiting middleware.
+4. AI Content Label — cuando se implemente P16.
+5. System Users — cuando aparezca el primer cliente que lo necesite.
 
 ---
 
-## 📋 P4 — Onboarding wizard
-
-Sin esto no podés onboardear usuarios reales sin acompañarlos a mano.
-
-- Primer login → guía paso a paso: crear cliente → conectar Meta → conectar Google → primer chat
-- Tutoriales contextuales en momentos clave
-- Reduce drop-off enormemente
-
----
-
-## 📋 P5 — Acciones con aprobación del analista
+## 📋 P4 — Acciones con aprobación del analista (depende de P3)
 
 El agente detecta una oportunidad y propone una acción concreta. El analista aprueba o rechaza antes de que se ejecute.
 
 ### Flujo
 1. Agente identifica optimización ("CPA 3x más alto que el promedio — recomiendo pausar")
 2. Aparece como tarjeta en el chat con botones "Aprobar" / "Rechazar"
-3. Si aprueba → se ejecuta via API
-4. Registro en Supabase: acción, fecha, quién aprobó, resultado
+3. Si aprueba → se ejecuta via API (pasando por los gates de P3)
+4. Registro en `api_audit_log` (P3): acción, fecha, quién aprobó, resultado
 
 ### Acciones iniciales (Meta Ads)
 - Pausar / activar campaña
@@ -172,42 +273,13 @@ El agente detecta una oportunidad y propone una acción concreta. El analista ap
 - Pausar / activar ad set
 
 ### Notas
-- **Nunca** ejecución sin revisión humana
-- El registro es importante para auditoría y para que el agente aprenda el historial de decisiones
-- Esta feature se simplifica si P10 (Meta MCP) está maduro — usaríamos las write tools del MCP en lugar de construirlas. Si P10 no llegó, se construye con la integración custom actual extendida.
+- **Nunca** ejecución sin revisión humana — enforzado en backend (P3).
+- El log es importante para auditoría y para apelación frente a Meta si fuera necesario.
+- Si P6 (Meta MCP migration) está maduro al momento de implementar P4: usar write tools del MCP oficial. Si no: integración custom actual extendida + Business App propia.
 
 ---
 
-## ⚙️ En paralelo a P1-P5 — POC Meta MCP (time-boxed)
-
-**Time-box estricto: 2 días.** No bloquea nada del roadmap principal.
-
-### Objetivo del POC
-- Confirmar que se puede conectar al MCP oficial de Meta (`mcp.facebook.com/ads`) desde el backend de Next.js
-- Confirmar que el flow multi-tenant funciona: dos usuarios distintos del SaaS pueden autenticar sus respectivos Business Managers contra el mismo MCP server, y el agente puede consultar cada uno por separado
-
-### Criterio de éxito
-Un test que autentique dos Business Managers distintos y haga una query exitosa contra cada uno desde el backend.
-
-### Si el POC anda
-Se promueve a P6 oficial: migrar `lib/meta-ads.ts` y `lib/meta-oauth.ts` al MCP. Beneficios: 29 tools en lugar de 2, sin manejar tokens de 60 días, sin riesgo de suspensión, las features nuevas de Meta se heredan.
-
-### Si el POC no anda en 2 días
-Se archiva por 2-3 meses. La integración custom actual sigue funcionando. Se reevalúa cuando haya más documentación pública del patrón multi-tenant MCP.
-
----
-
-## 📋 P6 — Migración Meta Ads a MCP (condicional al POC)
-
-Solo si el POC del paralelo anterior fue exitoso. Plan de migración:
-1. Reemplazar `get_meta_account_insights` y `get_meta_campaigns` por delegación al MCP
-2. Ampliar a las 29 tools disponibles
-3. Deprecar `lib/meta-ads.ts` y `lib/meta-oauth.ts`
-4. Mantener tabla `meta_connections` adaptada (qué guarda cambia según el patrón MCP)
-
----
-
-## 📋 P7 — Google Analytics 4
+## 📋 P5 — Google Analytics 4
 
 **Evaluar primero el MCP oficial de Google Analytics** (existe desde 2025). Si cubre el caso de uso, ahorrate la integración custom.
 
@@ -220,17 +292,77 @@ Cuando esté integrado, el agente puede cruzar: Meta generó awareness → Googl
 
 ---
 
-## 📋 P8 — Tool Use para Google Ads
+## 📋 P6 — Tool Use para Google Ads
 
-Cuando llegue la aprobación del Developer Token Basic Access.
+**Evaluar primero el MCP oficial de Google Ads.** Es read-only y solo expone `list_accessible_customers` + `search` (GAQL crudo). Conviene **envolverlo**: nuestra app expone a Claude tools de alto nivel (`get_campaign_performance`, `compare_periods`), por debajo cada tool ejecuta una query GAQL via el MCP. Buena DX + delegamos auth/API a Google = se alinea con pilar Safe-MCP.
 
-**Evaluar primero el MCP oficial de Google Ads.** Es read-only y solo expone `list_accessible_customers` + `search` (GAQL crudo). Conviene **envolverlo**: tu app expone a Claude tools de alto nivel (`get_campaign_performance`, `compare_periods`), por debajo cada tool ejecuta una query GAQL via el MCP. Buena DX + delegás auth/API a Google.
-
-Para escritura: el MCP no soporta hoy → integración custom cuando llegue el Developer Token.
+Para escritura: el MCP no soporta hoy → integración custom cuando llegue el Developer Token. La integración custom también debe pasar por los gates de P3.
 
 ---
 
-## 📋 P9 — Botón Reconectar OAuth
+## 📋 P7 — Reporting estructurado
+
+- Plantilla de reporte por cliente: secciones, métricas, orden
+- Selector de fechas que dispara consultas a las APIs conectadas
+- El agente genera el reporte: resumen ejecutivo, métricas clave, análisis por campaña, recomendaciones priorizadas
+- Exportación PDF
+- Más completo con GA4 (P5), Google Ads tools (P6) y datos de ventas (P2) integrados
+
+---
+
+## 📋 P8 — Alertas proactivas
+
+El salto conceptual de "chat reactivo" a "copiloto proactivo".
+
+- Cron jobs (Vercel Cron o Supabase Edge Functions) corren análisis periódicos
+- Ejemplos: "El CPC de la campaña X subió 40% sin cambios en el copy", "El CTR bajó por debajo del benchmark histórico", "El token de Meta vence en 7 días"
+- Sistema de notificaciones: email (Resend) o in-app
+
+---
+
+## ⚙️ En paralelo a P1–P8 — POC Meta MCP (time-boxed)
+
+**Time-box estricto: 2 días.** No bloquea nada del roadmap principal.
+
+### Objetivo del POC
+- Confirmar que se puede conectar al MCP oficial de Meta (`mcp.facebook.com/ads`) desde el backend de Next.js
+- Confirmar que el flow multi-tenant funciona: dos usuarios distintos del SaaS pueden autenticar sus respectivos Business Managers contra el mismo MCP server, y el agente puede consultar cada uno por separado
+
+### Criterio de éxito
+Un test que autentique dos Business Managers distintos y haga una query exitosa contra cada uno desde el backend, **pasando por los gates de P3 (audit log + rate limiting)**.
+
+### Si el POC anda
+Se promueve a tarea formal: migrar `lib/meta-ads.ts` y `lib/meta-oauth.ts` al MCP. Beneficios: 29 tools en lugar de 2, sin manejar tokens de 60 días, sin riesgo de baneo por dev app propia, las features nuevas de Meta se heredan, y el positioning "Safe-MCP" se fortalece (somos cliente del MCP oficial, no de uno comunitario).
+
+### Si el POC no anda en 2 días
+Se archiva por 2-3 meses. La integración custom actual sigue funcionando — pero **debe ser refactorizada para pasar por los gates de P3** (rate limiting + audit log) sí o sí. La seguridad no espera por el MCP.
+
+---
+
+## 📋 P9 — Billing y suscripciones
+
+**Importante:** hasta este momento, validamos willingness-to-pay manualmente (Stripe Payment Links + facturas manuales a los primeros 5-10 clientes early adopter). La integración billing-app la construimos cuando ya tenemos señales claras de que el producto es vendible.
+
+Cuando se implementa:
+- Stripe o Lemon Squeezy
+- Pricing tentativo: por cliente/mes (ej: $30/cliente con tope de N consultas), o por agencia con tope de clientes
+- Trial de 14 días
+- Webhook → Supabase para gating de features según plan
+
+---
+
+## 📋 P10 — Onboarding wizard
+
+Cuando ya hay producto sellable y billing, sin esto no podés onboardear usuarios reales sin acompañarlos a mano.
+
+- Primer login → guía paso a paso: crear cliente → conectar Meta → conectar Google → primer chat
+- En cada paso de conexión, mensaje explícito "conectando via MCP oficial — tu cuenta no corre riesgo de baneo" (refuerza pilar #1)
+- Tutoriales contextuales en momentos clave
+- Reduce drop-off enormemente
+
+---
+
+## 📋 P11 — Botón Reconectar OAuth
 
 En el dashboard, junto a "Meta Ads conectado" / "Google Ads conectado", agregar botón secundario "Reconectar" que redirija al flow OAuth.
 
@@ -238,27 +370,7 @@ Permite agregar más Business Managers, actualizar tokens vencidos, cambiar de c
 
 ---
 
-## 📋 P10 — Reporting estructurado
-
-- Plantilla de reporte por cliente: secciones, métricas, orden
-- Selector de fechas que dispara consultas a las APIs conectadas
-- El agente genera el reporte: resumen ejecutivo, métricas clave, análisis por campaña, recomendaciones priorizadas
-- Exportación PDF
-- Más completo con GA4 (P7) y datos de ventas (P2) integrados
-
----
-
-## 📋 P11 — Alertas proactivas
-
-El salto conceptual de "chat reactivo" a "copiloto proactivo".
-
-- Cron jobs (Vercel o Supabase Edge Functions) corren análisis periódicos
-- Ejemplos: "El CPC de la campaña X subió 40% sin cambios en el copy", "El CTR bajó por debajo del benchmark histórico", "El token de Meta vence en 7 días"
-- Sistema de notificaciones: email (Resend) o in-app
-
----
-
-## 📋 P12 — Multi-tenancy real (team accounts)
+## 📋 P12 — Multi-tenancy real (team accounts) — pilar #2
 
 Una agencia tiene N analistas con acceso a los mismos clientes.
 
@@ -282,8 +394,10 @@ Una agencia tiene N analistas con acceso a los mismos clientes.
 ## 📋 P14 — Marketing site y onboarding público
 
 - Landing en `megabait.com.ar/copiloto` o subdomain
-- Casos de uso, screenshots, comparativa explícita vs "Claude Desktop + MCPs"
-- Copy clave: lo que tu producto hace y los MCPs solos no — multi-cliente, contexto persistente, criterio analítico Megabait, cruce con ventas reales
+- **Mensaje principal: "Safe AI for ad accounts"** — derivado del positioning estratégico. Casos documentados de baneos por MCPs no oficiales como prueba social negativa de la competencia.
+- Página `/security` o `/safety` con la safety posture detallada (componentes de P3 explicados al cliente final)
+- Casos de uso, screenshots, comparativa explícita vs "Claude Desktop + MCPs comunitarios"
+- Copy clave: lo que el producto hace y un MCP suelto no — multi-cliente, contexto persistente, criterio analítico Megabait, cruce con ventas reales, **y sobre todo: seguridad**
 
 ---
 
@@ -292,6 +406,7 @@ Una agencia tiene N analistas con acceso a los mismos clientes.
 - Logging estructurado de tool calls (cuántas veces cada tool, qué errores, qué clientes)
 - Métricas de uso por cliente (detectar churn + billing)
 - Sentry u OpenObserve para errores
+- Dashboard interno con métricas del audit log de P3 — para auditar nosotros mismos que el sistema sigue siendo seguro
 
 ---
 
@@ -303,7 +418,9 @@ El agente puede generar imágenes para campañas directamente desde el chat, bas
 1. Analista describe la creatividad o el agente la propone basándose en datos
 2. El agente construye un prompt optimizado para publicidad con contexto del cliente
 3. Llamada a API de generación
-4. Imagen aparece en el chat, se descarga para subir a Meta o Google Ads
+4. Imagen aparece en el chat marcada como `is_ai_generated: true`
+5. Si se va a publicar, **el sistema aplica el AI Content Label de Meta automáticamente** (componente de P3)
+6. Si por alguna razón no se puede aplicar el label, no se publica
 
 ### Tecnología
 - **fal.ai con FLUX** → mejor relación calidad/precio para imágenes publicitarias
@@ -313,7 +430,7 @@ El agente puede generar imágenes para campañas directamente desde el chat, bas
 Técnicamente posible (Runway, Kling AI), pero tiempo de generación + costo lo hacen inviable para v1.
 
 ### Nota de timing
-Más valioso cuando P8 (Google Ads tools) y P7 (GA4) estén completos — así el agente propone creatividades basadas en insights reales, no solo en lo que el analista describe.
+Más valioso cuando P5 (GA4) y P6 (Google Ads tools) estén completos — así el agente propone creatividades basadas en insights reales, no solo en lo que el analista describe.
 
 ---
 
@@ -326,4 +443,11 @@ Más valioso cuando P8 (Google Ads tools) y P7 (GA4) estén completos — así e
 - **Versión Meta Graph API: v19.0**
 - **El loop de Tool Use en `/app/api/chat/route.ts` soporta múltiples llamadas encadenadas** — no modificar esa estructura sin entenderla primero
 - **`max_tokens` en la llamada a Anthropic está en 2048** para soportar el ciclo de tool use
-- **MCP en backend**: si avanzás con P6, confirmar la implementación actual del Anthropic SDK para conectar a MCP servers remotos desde el backend (no Claude Desktop). Esa es la decisión técnica clave.
+- **MCP en backend**: si avanzás con la migración Meta MCP, confirmar la implementación actual del Anthropic SDK para conectar a MCP servers remotos desde el backend (no Claude Desktop). Esa es la decisión técnica clave.
+
+### Reglas de oro para Safe-MCP (P3)
+- **Nunca llamar a Meta/Google APIs directo desde un route handler.** Siempre via el middleware/queue de rate limiting de P3.
+- **Nunca escribir sin un click de aprobación humana.** Enforce en backend, no solo UI.
+- **Cada call queda en `api_audit_log`.** Sin excepción.
+- **AI Content Label es default ON, no opcional.** Si no se puede aplicar, no se publica.
+- **MCPs comunitarios nunca son una opción.** Si hace falta integrar algo que no está en MCP oficial, se hace via API oficial con nuestra propia app aprobada.
