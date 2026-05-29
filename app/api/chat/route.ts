@@ -3,6 +3,7 @@ import { anthropic } from '@/lib/anthropic';
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createGoogleAdsClient } from '@/lib/google-ads';
 import { getAccountInsights, getCampaigns } from '@/lib/meta-ads';
+import { logApiCall } from '@/lib/api-audit';
 import { NextResponse } from 'next/server';
 
 interface MetricRow {
@@ -17,7 +18,10 @@ interface MetricRow {
 async function fetchGoogleAdsMetrics(
   accountId: string,
   refreshToken: string,
+  userId: string,
+  clientId: string,
 ): Promise<string | null> {
+  const endpoint = `customers/${accountId}/googleAds:searchStream`;
   try {
     const googleAds = createGoogleAdsClient();
     const customer = googleAds.Customer({
@@ -37,6 +41,16 @@ async function fetchGoogleAdsMetrics(
       WHERE segments.date DURING LAST_30_DAYS
         AND campaign.status != 'REMOVED'
     `);
+
+    await logApiCall({
+      userId,
+      clientId,
+      platform: 'google',
+      endpoint,
+      requestParams: { query: 'campaign_metrics_last_30d', accountId },
+      responseOk: true,
+      triggeredBy: 'system_prompt',
+    });
 
     if (!rows.length) return null;
 
@@ -74,6 +88,16 @@ async function fetchGoogleAdsMetrics(
 - CPC promedio: $${cpc}`;
   } catch (err) {
     console.error('[Google Ads] Error al obtener métricas:', err);
+    await logApiCall({
+      userId,
+      clientId,
+      platform: 'google',
+      endpoint,
+      requestParams: { query: 'campaign_metrics_last_30d', accountId },
+      responseOk: false,
+      errorMessage: err instanceof Error ? err.message : String(err),
+      triggeredBy: 'system_prompt',
+    });
     return null;
   }
 }
@@ -151,6 +175,8 @@ async function executeMetaTool(
   toolInput: Record<string, string>,
   adAccountId: string,
   accessToken: string,
+  userId: string,
+  clientId: string,
 ): Promise<string> {
   // Siempre retorna string — nunca propaga excepciones al loop de tool use.
   // Si algo falla, Claude recibe el mensaje de error y puede responderle al usuario.
@@ -162,6 +188,7 @@ async function executeMetaTool(
     const datePreset = toolInput.date_preset || 'last_30d';
 
     if (toolName === 'get_meta_account_insights') {
+      const endpoint = `${adAccountId}/insights`;
       const insights = await getAccountInsights(
         accessToken,
         adAccountId,
@@ -169,6 +196,16 @@ async function executeMetaTool(
         datePreset,
         timeRange,
       );
+
+      await logApiCall({
+        userId,
+        clientId,
+        platform: 'meta',
+        toolName,
+        endpoint,
+        requestParams: { datePreset, timeRange: timeRange ?? null },
+        responseOk: true,
+      });
 
       if (!insights) return 'No hay datos disponibles para el período seleccionado.';
 
@@ -194,6 +231,7 @@ async function executeMetaTool(
     }
 
     if (toolName === 'get_meta_campaigns') {
+      const endpoint = `${adAccountId}/campaigns`;
       console.log(
         `[Meta Tool] get_meta_campaigns - datePreset: ${datePreset}, timeRange: ${JSON.stringify(timeRange)}`,
       );
@@ -205,6 +243,16 @@ async function executeMetaTool(
         datePreset,
         timeRange,
       );
+
+      await logApiCall({
+        userId,
+        clientId,
+        platform: 'meta',
+        toolName,
+        endpoint,
+        requestParams: { datePreset, timeRange: timeRange ?? null },
+        responseOk: true,
+      });
 
       console.log(`[Meta Tool] get_meta_campaigns - ${campaigns.length} campañas recibidas`);
 
@@ -226,6 +274,16 @@ async function executeMetaTool(
     return 'Tool no reconocida.';
   } catch (err: any) {
     console.error(`[Meta Tool] Error en ${toolName}:`, err);
+    await logApiCall({
+      userId,
+      clientId,
+      platform: 'meta',
+      toolName,
+      endpoint: `${adAccountId}/${toolName === 'get_meta_account_insights' ? 'insights' : 'campaigns'}`,
+      requestParams: { datePreset: toolInput.date_preset ?? 'last_30d' },
+      responseOk: false,
+      errorMessage: err.message || 'Error desconocido al consultar Meta Ads',
+    });
     return JSON.stringify({
       error: err.message || 'Error desconocido al consultar Meta Ads',
     });
@@ -272,6 +330,8 @@ export async function POST(request: Request) {
       const metrics = await fetchGoogleAdsMetrics(
         client.google_ads_account_id,
         connection.refresh_token,
+        user.id,
+        client.id,
       );
       if (metrics) {
         metricsBlock = `\n\n${metrics}\n\nUsá estos datos reales como base para tu análisis.`;
@@ -491,6 +551,8 @@ Si el analista te pide algo que va contra los principios de arriba (pausar sin s
             block.input as Record<string, string>,
             client.meta_ads_account_id,
             metaAccessToken!,
+            user.id,
+            client.id,
           );
 
           toolResults.push({
