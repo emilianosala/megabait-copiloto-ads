@@ -5,10 +5,15 @@ import { NextResponse } from 'next/server';
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const state = searchParams.get('state');
+  const state = searchParams.get('state'); // userId:clientId
   const oauthError = searchParams.get('error');
 
-  if (oauthError || !code) {
+  if (oauthError || !code || !state) {
+    return NextResponse.redirect(`${origin}/dashboard?google=error`);
+  }
+
+  const [userId, clientId] = state.split(':');
+  if (!userId || !clientId) {
     return NextResponse.redirect(`${origin}/dashboard?google=error`);
   }
 
@@ -16,7 +21,7 @@ export async function GET(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Verificar que el state coincide con el usuario autenticado (anti-CSRF)
-  if (!user || user.id !== state) {
+  if (!user || user.id !== userId) {
     return NextResponse.redirect(`${origin}/dashboard?google=error`);
   }
 
@@ -32,8 +37,8 @@ export async function GET(request: Request) {
   const { error } = await supabase
     .from('google_connections')
     .upsert(
-      { user_id: user.id, refresh_token: tokens.refresh_token, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id' },
+      { client_id: clientId, connected_by: user.id, refresh_token: tokens.refresh_token },
+      { onConflict: 'client_id' },
     );
 
   if (error) {

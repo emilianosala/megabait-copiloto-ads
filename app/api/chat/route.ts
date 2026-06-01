@@ -20,6 +20,7 @@ async function fetchGoogleAdsMetrics(
   refreshToken: string,
   userId: string,
   clientId: string,
+  organizationId: string,
 ): Promise<string | null> {
   const endpoint = `customers/${accountId}/googleAds:searchStream`;
   try {
@@ -45,6 +46,7 @@ async function fetchGoogleAdsMetrics(
     await logApiCall({
       userId,
       clientId,
+      organizationId,
       platform: 'google',
       endpoint,
       requestParams: { query: 'campaign_metrics_last_30d', accountId },
@@ -91,6 +93,7 @@ async function fetchGoogleAdsMetrics(
     await logApiCall({
       userId,
       clientId,
+      organizationId,
       platform: 'google',
       endpoint,
       requestParams: { query: 'campaign_metrics_last_30d', accountId },
@@ -177,6 +180,7 @@ async function executeMetaTool(
   accessToken: string,
   userId: string,
   clientId: string,
+  organizationId: string,
 ): Promise<string> {
   // Siempre retorna string — nunca propaga excepciones al loop de tool use.
   // Si algo falla, Claude recibe el mensaje de error y puede responderle al usuario.
@@ -200,6 +204,7 @@ async function executeMetaTool(
       await logApiCall({
         userId,
         clientId,
+        organizationId,
         platform: 'meta',
         toolName,
         endpoint,
@@ -247,6 +252,7 @@ async function executeMetaTool(
       await logApiCall({
         userId,
         clientId,
+        organizationId,
         platform: 'meta',
         toolName,
         endpoint,
@@ -277,6 +283,7 @@ async function executeMetaTool(
     await logApiCall({
       userId,
       clientId,
+      organizationId,
       platform: 'meta',
       toolName,
       endpoint: `${adAccountId}/${toolName === 'get_meta_account_insights' ? 'insights' : 'campaigns'}`,
@@ -323,7 +330,7 @@ export async function POST(request: Request) {
     const { data: connection } = await supabase
       .from('google_connections')
       .select('refresh_token')
-      .eq('user_id', user.id)
+      .eq('client_id', client.id)
       .maybeSingle();
 
     if (connection) {
@@ -332,6 +339,7 @@ export async function POST(request: Request) {
         connection.refresh_token,
         user.id,
         client.id,
+        client.organization_id,
       );
       if (metrics) {
         metricsBlock = `\n\n${metrics}\n\nUsá estos datos reales como base para tu análisis.`;
@@ -345,7 +353,7 @@ export async function POST(request: Request) {
     const { data: metaConnection } = await supabase
       .from('meta_connections')
       .select('access_token')
-      .eq('user_id', user.id)
+      .eq('client_id', client.id)
       .maybeSingle();
 
     if (metaConnection) {
@@ -553,6 +561,7 @@ Si el analista te pide algo que va contra los principios de arriba (pausar sin s
             metaAccessToken!,
             user.id,
             client.id,
+            client.organization_id,
           );
 
           toolResults.push({

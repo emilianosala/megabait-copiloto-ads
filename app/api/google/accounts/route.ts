@@ -32,7 +32,10 @@ function resolveCurrency(obj: { currency_code?: string; currencyCode?: string })
   return obj.currency_code || obj.currencyCode || null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const clientId = searchParams.get('clientId');
+
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -40,14 +43,18 @@ export async function GET() {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 
+  if (!clientId) {
+    return NextResponse.json({ error: 'clientId requerido' }, { status: 400 });
+  }
+
   const { data: connection } = await supabase
     .from('google_connections')
     .select('refresh_token')
-    .eq('user_id', user.id)
+    .eq('client_id', clientId)
     .maybeSingle();
 
   if (!connection) {
-    return NextResponse.json({ error: 'Google Ads no conectado' }, { status: 400 });
+    return NextResponse.json({ error: 'Google Ads no conectado para este cliente' }, { status: 400 });
   }
 
   const googleAds = createGoogleAdsClient();
@@ -94,7 +101,6 @@ export async function GET() {
         const isManager = info.customer.manager ?? false;
 
         if (!isManager) {
-          // Cuenta de cliente directa — la agregamos como está.
           result.push({
             id: String(info.customer.id),
             name: resolveName(info.customer, `Cuenta ${customerId}`),
@@ -105,8 +111,6 @@ export async function GET() {
         }
 
         // Es un MCC: obtener sub-cuentas vía customer_client.
-        // Se requiere login_customer_id = id del MCC para que la API entienda
-        // que estamos navegando como ese manager.
         const mccCustomer = googleAds.Customer({
           customer_id: customerId,
           login_customer_id: customerId,
@@ -122,8 +126,6 @@ export async function GET() {
           FROM customer_client
           WHERE customer_client.level > 0
         `);
-
-        console.log(`[google/accounts] MCC ${customerId} sub-accounts:`, JSON.stringify(subRows));
 
         for (const row of subRows) {
           const cc = row.customer_client;

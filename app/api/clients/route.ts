@@ -1,4 +1,5 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
+import { getUserOrgId } from '@/lib/organizations';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
@@ -24,22 +25,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 
+  const orgId = await getUserOrgId(supabase, user.id);
+  if (!orgId) {
+    return NextResponse.json({ error: 'Organización no encontrada' }, { status: 500 });
+  }
+
   const body = await request.json();
 
   const { data, error } = await supabase
     .from('clients')
-    .insert([
-      {
-        user_id: user.id,
-        name: body.name,
-        industry: body.industry,
-        description: body.description,
-        objectives: body.objectives,
-        budget: body.budget,
-        kpis: body.kpis,
-        restrictions: body.restrictions,
-      },
-    ])
+    .insert([{
+      organization_id: orgId,
+      name: body.name,
+      industry: body.industry,
+      description: body.description,
+      objectives: body.objectives,
+      budget: body.budget,
+      kpis: body.kpis,
+      restrictions: body.restrictions,
+    }])
     .select()
     .single();
 

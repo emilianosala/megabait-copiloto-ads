@@ -5,10 +5,15 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const state = searchParams.get('state'); // user_id
+  const state = searchParams.get('state'); // userId:clientId
   const oauthError = searchParams.get('error');
 
-  if (oauthError || !code) {
+  if (oauthError || !code || !state) {
+    return NextResponse.redirect(`${origin}/dashboard?meta=error`);
+  }
+
+  const [userId, clientId] = state.split(':');
+  if (!userId || !clientId) {
     return NextResponse.redirect(`${origin}/dashboard?meta=error`);
   }
 
@@ -16,7 +21,7 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Verificar que el state coincide con el usuario autenticado (anti-CSRF)
-  if (!user || user.id !== state) {
+  if (!user || user.id !== userId) {
     return NextResponse.redirect(`${origin}/dashboard?meta=error`);
   }
 
@@ -26,8 +31,8 @@ export async function GET(request: NextRequest) {
     const { error: dbError } = await supabase
       .from('meta_connections')
       .upsert(
-        { user_id: user.id, access_token: accessToken, updated_at: new Date().toISOString() },
-        { onConflict: 'user_id' },
+        { client_id: clientId, connected_by: user.id, access_token: accessToken },
+        { onConflict: 'client_id' },
       );
 
     if (dbError) {

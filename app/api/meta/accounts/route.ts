@@ -2,7 +2,10 @@ import { createSupabaseServer } from '@/lib/supabase-server';
 import { getAdAccounts } from '@/lib/meta-ads';
 import { NextResponse } from 'next/server';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const clientId = searchParams.get('clientId');
+
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -10,14 +13,18 @@ export async function GET() {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 
+  if (!clientId) {
+    return NextResponse.json({ error: 'clientId requerido' }, { status: 400 });
+  }
+
   const { data: connection } = await supabase
     .from('meta_connections')
     .select('access_token')
-    .eq('user_id', user.id)
+    .eq('client_id', clientId)
     .maybeSingle();
 
   if (!connection) {
-    return NextResponse.json({ error: 'Meta Ads no conectado' }, { status: 400 });
+    return NextResponse.json({ error: 'Meta Ads no conectado para este cliente' }, { status: 400 });
   }
 
   try {

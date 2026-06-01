@@ -5,7 +5,25 @@
 - Next.js (App Router, TypeScript, CSS Modules)
 - Supabase (PostgreSQL + Auth + RLS)
 - Anthropic API (Claude Sonnet)
-- Deploy: Vercel → ads.megabait.com.ar
+- Deploy: Vercel → ads.megabait.com.ar (pendiente cambio a jair.megabait.com.ar)
+
+---
+
+## Identidad de marca
+
+Los productos de Megabait tienen "ai" en el medio del nombre.
+
+- **Agente de ads:** Jair (J-**AI**-R)
+- **Subdominio objetivo:** `jair.megabait.com.ar` (hoy: `ads.megabait.com.ar`)
+
+### Tareas para el cambio de subdominio (una sesión corta)
+1. Agregar `jair.megabait.com.ar` como dominio en Vercel (Settings → Domains)
+2. Crear CNAME en Cloudflare: `jair` → `cname.vercel-dns.com`
+3. Actualizar variable de entorno `META_REDIRECT_URI` en Vercel
+4. Actualizar redirect URI en Meta for Developers (panel de la app)
+5. Actualizar redirect URI en Google Cloud Console (Credentials)
+6. Verificar Supabase Auth → URL Configuration → Site URL
+7. Una vez propagado, eliminar el dominio `ads.megabait.com.ar`
 
 ---
 
@@ -81,6 +99,17 @@ Eventualmente: un **scheduled Claude agent** que cada lunes a la mañana hace el
 
 ---
 
+## Principio de propiedad de datos
+
+La entidad dueña de los datos es la **organización** que paga la cuenta (agencia o anunciante directo). Megabait actúa como custodio/procesador, no como propietario.
+
+- El historial de conversaciones y el contexto de cada cliente pertenecen a la organización, no al analista individual ni a Megabait.
+- Es exportable en cualquier momento ("tus datos son tuyos").
+- El borrado/offboarding de una organización es una operación limpia y delimitada.
+- Este principio está modelado explícitamente en el schema (ver `supabase/002_multi_tenant.sql`).
+
+---
+
 ## ✅ COMPLETADO
 
 ### Infraestructura y deploy
@@ -122,6 +151,15 @@ Eventualmente: un **scheduled Claude agent** que cada lunes a la mañana hace el
 - Tablas: `clients`, `conversations`, `google_connections`, `meta_connections`
 - RLS en todas
 - `meta_ads_account_id` en `clients`
+
+### Arquitectura multi-tenant (schema)
+- Tablas `organizations` y `organization_members` con propiedad explícita de datos
+- `clients` cuelga de `organization_id` (no de `user_id`)
+- `google_connections` y `meta_connections` por cliente (no por usuario)
+- Trigger de auto-creación de org en signup
+- `api_audit_log` con `organization_id`
+- Migración de datos existentes incluida (`supabase/002_multi_tenant.sql`)
+- **Nota:** La funcionalidad multi-analista de P12 queda pendiente — el schema está listo, falta la UI de invitación/roles.
 
 ### Páginas legales
 - `/privacy` y `/terms` en megabait.com.ar
@@ -300,13 +338,15 @@ Para escritura: el MCP no soporta hoy → integración custom cuando llegue el D
 
 ---
 
-## 📋 P7 — Reporting estructurado
+## 📋 P7 — Reporting conversacional
 
-- Plantilla de reporte por cliente: secciones, métricas, orden
-- Selector de fechas que dispara consultas a las APIs conectadas
-- El agente genera el reporte: resumen ejecutivo, métricas clave, análisis por campaña, recomendaciones priorizadas
-- Exportación PDF
-- Más completo con GA4 (P5), Google Ads tools (P6) y datos de ventas (P2) integrados
+En lugar de una interfaz tradicional de reporting (Looker Studio, Power BI), el analista le pide el reporte a Jair en lenguaje natural: "dame el reporte de las últimas 4 semanas con desglose por campaña y comparación contra el período anterior".
+
+Jair llama las herramientas necesarias, cruza los datos y presenta el resultado estructurado en el chat. Ventaja: ilimitadamente flexible sin necesidad de construir cada filtro/vista.
+
+- Funciona sobre la arquitectura de tool use existente
+- Se enriquece a medida que se agregan P5 (GA4), P6 (Google Ads tools) y P2 (ventas reales)
+- Exportación PDF como mejora posterior (html-to-pdf o similar)
 
 ---
 
@@ -431,6 +471,21 @@ Técnicamente posible (Runway, Kling AI), pero tiempo de generación + costo lo 
 
 ### Nota de timing
 Más valioso cuando P5 (GA4) y P6 (Google Ads tools) estén completos — así el agente propone creatividades basadas en insights reales, no solo en lo que el analista describe.
+
+---
+
+## 📋 P17 — Aprendizaje cruzado entre cuentas (escala futura)
+
+**Condición de activación:** muchas organizaciones, muchos meses de datos, volumen estadísticamente significativo para que un patrón no sea ruido.
+
+**Aclaración importante:** el modelo de Claude no aprende solo de las conversaciones. Cada llamada a la API es independiente. "Aprendizaje cruzado" significa construir explícitamente un pipeline:
+1. Extraer métricas anonimizadas de múltiples cuentas
+2. Detectar patrones estadísticamente significativos
+3. Convertir el resultado en contexto que Jair puede consultar
+
+Es un producto en sí mismo, no un efecto secundario del uso. No construir hasta validar que el volumen de datos lo justifica.
+
+**Propiedad de los datos agregados:** los datos crudos de cada cliente son de la organización. Los patrones agregados/anonimizados son de Megabait — siempre que estén correctamente anonimizados.
 
 ---
 

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 export interface AuditEntry {
   userId: string;
   clientId: string;
+  organizationId: string;
   platform: 'meta' | 'google';
   toolName?: string;
   endpoint: string;
@@ -25,6 +26,7 @@ export async function logApiCall(entry: AuditEntry): Promise<void> {
     await adminClient.from('api_audit_log').insert({
       user_id: entry.userId,
       client_id: entry.clientId,
+      organization_id: entry.organizationId,
       platform: entry.platform,
       tool_name: entry.toolName,
       endpoint: entry.endpoint,
