@@ -10,12 +10,14 @@ export async function GET(request: NextRequest) {
   const oauthError = searchParams.get('error');
 
   if (oauthError || !code || !state) {
-    return NextResponse.redirect(`${origin}/dashboard?meta=error`);
+    console.error('[meta/callback] early fail — oauthError:', oauthError, 'code:', !!code, 'state:', !!state);
+    return NextResponse.redirect(`${origin}/dashboard?meta=error&r=early`);
   }
 
   // state = userId + clientId (dos UUIDs de 36 chars, sin separador)
+  console.error('[meta/callback] state length:', state.length, 'state:', state);
   if (state.length !== 72) {
-    return NextResponse.redirect(`${origin}/dashboard?meta=error`);
+    return NextResponse.redirect(`${origin}/dashboard?meta=error&r=state${state.length}`);
   }
   const userId = state.slice(0, 36);
   const clientId = state.slice(36);
@@ -24,8 +26,9 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Verificar que el state coincide con el usuario autenticado (anti-CSRF)
+  console.error('[meta/callback] user:', user?.id, 'userId from state:', userId);
   if (!user || user.id !== userId) {
-    return NextResponse.redirect(`${origin}/clients/${clientId}/edit?meta=error`);
+    return NextResponse.redirect(`${origin}/clients/${clientId}/edit?meta=error&r=auth`);
   }
 
   try {
@@ -40,8 +43,8 @@ export async function GET(request: NextRequest) {
       );
 
     if (dbError) {
-      console.error('Error guardando meta_connection:', dbError.message);
-      return NextResponse.redirect(`${origin}/dashboard?meta=error`);
+      console.error('Error guardando meta_connection:', dbError.message, dbError.code);
+      return NextResponse.redirect(`${origin}/dashboard?meta=error&r=db&e=${encodeURIComponent(dbError.code ?? dbError.message.slice(0, 40))}`);
     }
 
     return NextResponse.redirect(`${origin}/clients/${clientId}/edit?meta=connected`);
