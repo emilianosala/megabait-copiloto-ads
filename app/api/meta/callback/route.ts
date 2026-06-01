@@ -1,4 +1,5 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
+import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import { exchangeCodeForToken } from '@/lib/meta-oauth';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -28,7 +29,8 @@ export async function GET(request: NextRequest) {
   try {
     const accessToken = await exchangeCodeForToken(code);
 
-    const { error: dbError } = await supabase
+    const admin = createSupabaseAdmin();
+    const { error: dbError } = await admin
       .from('meta_connections')
       .upsert(
         { client_id: clientId, connected_by: user.id, access_token: accessToken },

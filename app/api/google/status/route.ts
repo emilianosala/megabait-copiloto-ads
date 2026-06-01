@@ -1,4 +1,5 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
+import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
@@ -12,7 +13,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ connected: false });
   }
 
-  const { data } = await supabase
+  const admin = createSupabaseAdmin();
+  const { data } = await admin
     .from('google_connections')
     .select('id')
     .eq('client_id', clientId)

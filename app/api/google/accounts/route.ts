@@ -1,4 +1,5 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
+import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import { createGoogleAdsClient } from '@/lib/google-ads';
 import { NextResponse } from 'next/server';
 
@@ -47,7 +48,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'clientId requerido' }, { status: 400 });
   }
 
-  const { data: connection } = await supabase
+  const admin = createSupabaseAdmin();
+  const { data: connection } = await admin
     .from('google_connections')
     .select('refresh_token')
     .eq('client_id', clientId)

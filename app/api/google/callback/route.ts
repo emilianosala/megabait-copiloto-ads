@@ -1,4 +1,5 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
+import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import { createOAuthClient } from '@/lib/google-oauth';
 import { NextResponse } from 'next/server';
 
@@ -34,7 +35,8 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/clients/${clientId}/edit?google=no_refresh_token`);
   }
 
-  const { error } = await supabase
+  const admin = createSupabaseAdmin();
+  const { error } = await admin
     .from('google_connections')
     .upsert(
       { client_id: clientId, connected_by: user.id, refresh_token: tokens.refresh_token },

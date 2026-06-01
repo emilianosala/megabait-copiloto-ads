@@ -1,4 +1,5 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
+import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAdAccounts } from '@/lib/meta-ads';
 import { NextResponse } from 'next/server';
 
@@ -17,7 +18,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'clientId requerido' }, { status: 400 });
   }
 
-  const { data: connection } = await supabase
+  const admin = createSupabaseAdmin();
+  const { data: connection } = await admin
     .from('meta_connections')
     .select('access_token')
     .eq('client_id', clientId)
