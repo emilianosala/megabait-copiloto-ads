@@ -151,6 +151,21 @@
   color: var(--text-muted);
 }
 
+.connectButton {
+  display: inline-block;
+  background: var(--accent);
+  color: #111111;
+  font-weight: 700;
+  padding: 10px 24px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.connectButton:hover {
+  background: var(--accent-hover);
+}
+
 .accountsList {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import styles from './dashboard.module.css';
 
@@ -14,10 +14,7 @@ interface Client {
 function DashboardContent() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
-  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -31,40 +28,7 @@ function DashboardContent() {
         setClients(data);
         setLoading(false);
       });
-
-    fetch('/api/google/status')
-      .then((res) => res.json())
-      .then((data) => setGoogleConnected(data.connected));
-
-    fetch('/api/meta/status')
-      .then((res) => res.json())
-      .then((data) => setMetaConnected(data.connected));
   }, []);
-
-  // Leer el query param ?google= que deja el callback de OAuth
-  useEffect(() => {
-    const googleParam = searchParams.get('google');
-    if (googleParam === 'connected') {
-      setGoogleConnected(true);
-      // Limpiar el query param de la URL sin recargar
-      router.replace('/dashboard');
-    } else if (googleParam === 'error') {
-      alert('Error al conectar Google Ads. Intentá de nuevo.');
-      router.replace('/dashboard');
-    } else if (googleParam === 'no_refresh_token') {
-      alert('Google no emitió un refresh token. Intentá desconectar la app desde tu cuenta de Google y volvé a conectar.');
-      router.replace('/dashboard');
-    }
-
-    const metaParam = searchParams.get('meta');
-    if (metaParam === 'connected') {
-      setMetaConnected(true);
-      router.replace('/dashboard');
-    } else if (metaParam === 'error') {
-      alert('Error al conectar Meta Ads. Intentá de nuevo.');
-      router.replace('/dashboard');
-    }
-  }, [searchParams, router]);
 
   if (loading) return <div className={styles.loading}>Cargando...</div>;
 
@@ -75,28 +39,6 @@ function DashboardContent() {
           MEGA<span>BAIT</span>
         </div>
         <div className={styles.headerActions}>
-          {googleConnected === false && (
-            <a href="/api/google/auth" className={styles.googleButton}>
-              Conectar Google Ads
-            </a>
-          )}
-          {googleConnected === true && (
-            <div className={styles.googleConnected}>
-              <span className={styles.googleDot} />
-              Google Ads conectado
-            </div>
-          )}
-          {metaConnected === false && (
-            <a href="/api/meta/auth" className={styles.metaButton}>
-              Conectar Meta Ads
-            </a>
-          )}
-          {metaConnected === true && (
-            <div className={styles.metaConnected}>
-              <span className={styles.metaDot} />
-              Meta Ads conectado
-            </div>
-          )}
           <button className={styles.logoutButton} onClick={handleLogout}>
             Salir
           </button>

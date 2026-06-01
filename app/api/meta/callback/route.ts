@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
   // Verificar que el state coincide con el usuario autenticado (anti-CSRF)
   if (!user || user.id !== userId) {
-    return NextResponse.redirect(`${origin}/dashboard?meta=error`);
+    return NextResponse.redirect(`${origin}/clients/${clientId}/edit?meta=error`);
   }
 
   try {
@@ -40,9 +40,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${origin}/dashboard?meta=error`);
     }
 
-    return NextResponse.redirect(`${origin}/dashboard?meta=connected`);
+    return NextResponse.redirect(`${origin}/clients/${clientId}/edit?meta=connected`);
   } catch (err) {
     console.error('Error en Meta callback:', err);
-    return NextResponse.redirect(`${origin}/dashboard?meta=error`);
+    return NextResponse.redirect(`${origin}/clients/${clientId}/edit?meta=error`);
   }
 }

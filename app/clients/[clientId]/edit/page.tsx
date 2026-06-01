@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import styles from '../../client-form.module.css';
 
 interface GoogleAccount {
@@ -18,15 +18,20 @@ interface MetaAccount {
   account_status: number;
 }
 
-export default function EditClientPage() {
+function EditClientContent() {
   const { clientId } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+
+  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
   const [accounts, setAccounts] = useState<GoogleAccount[] | null>(null);
   const [accountsError, setAccountsError] = useState<string | null>(null);
+
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [metaAccounts, setMetaAccounts] = useState<MetaAccount[] | null>(null);
   const [metaAccountsError, setMetaAccountsError] = useState<string | null>(null);
+
   const [form, setForm] = useState({
     name: '',
     industry: '',
@@ -38,6 +43,26 @@ export default function EditClientPage() {
     google_ads_account_id: '',
     meta_ads_account_id: '',
   });
+
+  function loadGoogleAccounts() {
+    fetch(`/api/google/accounts?clientId=${clientId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) setAccountsError(data.error);
+        else setAccounts(data);
+      })
+      .catch(() => setAccountsError('Error al cargar cuentas'));
+  }
+
+  function loadMetaAccounts() {
+    fetch(`/api/meta/accounts?clientId=${clientId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) setMetaAccountsError(data.error);
+        else setMetaAccounts(data);
+      })
+      .catch(() => setMetaAccountsError('Error al cargar cuentas de Meta'));
+  }
 
   useEffect(() => {
     fetch(`/api/clients/${clientId}`)
@@ -56,35 +81,47 @@ export default function EditClientPage() {
         }),
       );
 
-    fetch('/api/google/accounts')
+    fetch(`/api/google/status?clientId=${clientId}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.error) {
-          setAccountsError(data.error);
-        } else {
-          setAccounts(data);
-        }
-      })
-      .catch(() => setAccountsError('Error al cargar cuentas'));
+        setGoogleConnected(data.connected);
+        if (data.connected) loadGoogleAccounts();
+      });
 
-    fetch('/api/meta/status')
+    fetch(`/api/meta/status?clientId=${clientId}`)
       .then((res) => res.json())
       .then((data) => {
         setMetaConnected(data.connected);
-        if (data.connected) {
-          fetch('/api/meta/accounts')
-            .then((res) => res.json())
-            .then((accounts) => {
-              if (accounts.error) {
-                setMetaAccountsError(accounts.error);
-              } else {
-                setMetaAccounts(accounts);
-              }
-            })
-            .catch(() => setMetaAccountsError('Error al cargar cuentas de Meta'));
-        }
+        if (data.connected) loadMetaAccounts();
       });
   }, [clientId]);
+
+  // Manejar el callback de OAuth: el backend redirige de vuelta a esta página
+  // con ?google=connected o ?meta=connected después de autorizar.
+  useEffect(() => {
+    const googleParam = searchParams.get('google');
+    if (googleParam === 'connected') {
+      setGoogleConnected(true);
+      loadGoogleAccounts();
+      router.replace(`/clients/${clientId}/edit`);
+    } else if (googleParam === 'error') {
+      alert('Error al conectar Google Ads. Intentá de nuevo.');
+      router.replace(`/clients/${clientId}/edit`);
+    } else if (googleParam === 'no_refresh_token') {
+      alert('Google no emitió un refresh token. Desconectá la app desde tu cuenta de Google y volvé a conectar.');
+      router.replace(`/clients/${clientId}/edit`);
+    }
+
+    const metaParam = searchParams.get('meta');
+    if (metaParam === 'connected') {
+      setMetaConnected(true);
+      loadMetaAccounts();
+      router.replace(`/clients/${clientId}/edit`);
+    } else if (metaParam === 'error') {
+      alert('Error al conectar Meta Ads. Intentá de nuevo.');
+      router.replace(`/clients/${clientId}/edit`);
+    }
+  }, [searchParams]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -197,19 +234,27 @@ export default function EditClientPage() {
           <div className={styles.accountsSection}>
             <p className={styles.accountsSectionTitle}>Cuenta de Google Ads</p>
 
-            {accountsError === 'Google Ads no conectado' && (
-              <p className={styles.accountsHint}>
-                Conectá Google Ads desde el dashboard para poder vincular una cuenta.
-              </p>
+            {googleConnected === false && (
+              <>
+                <p className={styles.accountsHint}>
+                  Esta cuenta no tiene Google Ads conectado todavía.
+                </p>
+                <a
+                  href={`/api/google/auth?clientId=${clientId}`}
+                  className={styles.connectButton}
+                >
+                  Conectar Google Ads
+                </a>
+              </>
             )}
 
-            {accountsError && accountsError !== 'Google Ads no conectado' && (
+            {googleConnected === true && accountsError && (
               <p className={styles.accountsHint}>
                 No se pudieron cargar las cuentas. Verificá que el token de Google esté vigente.
               </p>
             )}
 
-            {!accounts && !accountsError && (
+            {googleConnected === true && !accounts && !accountsError && (
               <p className={styles.accountsHint}>Cargando cuentas...</p>
             )}
 
@@ -242,10 +287,7 @@ export default function EditClientPage() {
                       {account.name} ({account.id})
                     </span>
                     <span className={styles.accountMeta}>
-                      {[
-                        account.currency,
-                        account.is_manager ? 'MCC' : null,
-                      ]
+                      {[account.currency, account.is_manager ? 'MCC' : null]
                         .filter(Boolean)
                         .join(' · ')}
                     </span>
@@ -260,9 +302,17 @@ export default function EditClientPage() {
             <p className={styles.accountsSectionTitle}>Cuenta de Meta Ads</p>
 
             {metaConnected === false && (
-              <p className={styles.accountsHint}>
-                Conectá Meta Ads desde el dashboard para poder vincular una cuenta.
-              </p>
+              <>
+                <p className={styles.accountsHint}>
+                  Esta cuenta no tiene Meta Ads conectado todavía.
+                </p>
+                <a
+                  href={`/api/meta/auth?clientId=${clientId}`}
+                  className={styles.connectButton}
+                >
+                  Conectar Meta Ads
+                </a>
+              </>
             )}
 
             {metaConnected === true && !metaAccounts && !metaAccountsError && (
@@ -303,9 +353,7 @@ export default function EditClientPage() {
                     <span className={styles.accountName}>
                       {account.name} ({account.id})
                     </span>
-                    <span className={styles.accountMeta}>
-                      {account.currency}
-                    </span>
+                    <span className={styles.accountMeta}>{account.currency}</span>
                   </button>
                 ))}
               </div>
@@ -330,5 +378,13 @@ export default function EditClientPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function EditClientPage() {
+  return (
+    <Suspense>
+      <EditClientContent />
+    </Suspense>
   );
 }

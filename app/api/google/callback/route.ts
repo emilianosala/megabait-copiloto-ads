@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
   // Verificar que el state coincide con el usuario autenticado (anti-CSRF)
   if (!user || user.id !== userId) {
-    return NextResponse.redirect(`${origin}/dashboard?google=error`);
+    return NextResponse.redirect(`${origin}/clients/${clientId}/edit?google=error`);
   }
 
   const oauthClient = createOAuthClient();
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   if (!tokens.refresh_token) {
     // Puede ocurrir si el usuario ya autorizó antes y Google no emite un nuevo
     // refresh_token. El prompt: 'consent' en /auth debería prevenirlo.
-    return NextResponse.redirect(`${origin}/dashboard?google=no_refresh_token`);
+    return NextResponse.redirect(`${origin}/clients/${clientId}/edit?google=no_refresh_token`);
   }
 
   const { error } = await supabase
@@ -43,8 +43,8 @@ export async function GET(request: Request) {
 
   if (error) {
     console.error('Error guardando google_connection:', error.message);
-    return NextResponse.redirect(`${origin}/dashboard?google=error`);
+    return NextResponse.redirect(`${origin}/clients/${clientId}/edit?google=error`);
   }
 
-  return NextResponse.redirect(`${origin}/dashboard?google=connected`);
+  return NextResponse.redirect(`${origin}/clients/${clientId}/edit?google=connected`);
 }
