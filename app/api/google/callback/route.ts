@@ -13,10 +13,12 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/dashboard?google=error`);
   }
 
-  const [userId, clientId] = state.split(':');
-  if (!userId || !clientId) {
+  // state = userId + clientId (dos UUIDs de 36 chars, sin separador)
+  if (state.length !== 72) {
     return NextResponse.redirect(`${origin}/dashboard?google=error`);
   }
+  const userId = state.slice(0, 36);
+  const clientId = state.slice(36);
 
   const supabase = await createSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();

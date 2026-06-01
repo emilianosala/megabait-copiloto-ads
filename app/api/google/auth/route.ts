@@ -24,8 +24,8 @@ export async function GET(request: Request) {
     // prompt: 'consent' fuerza que Google devuelva siempre un refresh_token,
     // incluso si el usuario ya autorizó la app antes.
     prompt: 'consent',
-    // state = userId:clientId — se verifica en el callback (anti-CSRF)
-    state: `${user.id}:${clientId}`,
+    // state = userId + clientId (dos UUIDs de 36 chars, sin separador)
+    state: `${user.id}${clientId}`,
   });
 
   return NextResponse.redirect(url);
