@@ -205,22 +205,30 @@ CREATE POLICY "org_members_all" ON public.google_connections FOR ALL
   ));
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 6. TRIGGER: auto-crear org para nuevos usuarios en signup
+-- 6. GRANTS — necesarios para que el rol authenticated pueda usar las tablas
+--    nuevas (sin esto las RLS policies fallan con permission denied)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+GRANT SELECT ON public.organizations TO anon, authenticated;
+GRANT SELECT ON public.organization_members TO anon, authenticated;
+GRANT INSERT ON public.organizations TO authenticated;
+GRANT INSERT ON public.organization_members TO authenticated;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 7. TRIGGER: auto-crear org para nuevos usuarios en signup
 -- ═══════════════════════════════════════════════════════════════════════════
 
 CREATE OR REPLACE FUNCTION public.handle_new_user_organization()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
-AS $$
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
-  v_org_id UUID;
+  new_org_id UUID;
 BEGIN
   INSERT INTO public.organizations (name)
-  VALUES (COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email, 'Mi organización'))
-  RETURNING id INTO v_org_id;
+  VALUES (COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email))
+  RETURNING id INTO new_org_id;
 
   INSERT INTO public.organization_members (organization_id, user_id, role)
-  VALUES (v_org_id, NEW.id, 'owner');
+  VALUES (new_org_id, NEW.id, 'owner');
 
   RETURN NEW;
 END;

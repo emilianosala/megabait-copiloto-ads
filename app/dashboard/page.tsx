@@ -25,9 +25,10 @@ function DashboardContent() {
     fetch('/api/clients')
       .then((res) => res.json())
       .then((data) => {
-        setClients(data);
+        setClients(Array.isArray(data) ? data : []);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   if (loading) return <div className={styles.loading}>Cargando...</div>;
