@@ -295,6 +295,15 @@ function EditClientContent() {
                 ))}
               </div>
             )}
+
+            {googleConnected === true && (
+              <a
+                href={`/api/google/auth?clientId=${clientId}`}
+                className={styles.reconnectButton}
+              >
+                Reconectar Google Ads
+              </a>
+            )}
           </div>
 
           {/* ── Sección Meta Ads ── */}
@@ -357,6 +366,15 @@ function EditClientContent() {
                   </button>
                 ))}
               </div>
+            )}
+
+            {metaConnected === true && (
+              <a
+                href={`/api/meta/auth?clientId=${clientId}`}
+                className={styles.reconnectButton}
+              >
+                Reconectar Meta Ads
+              </a>
             )}
           </div>
 

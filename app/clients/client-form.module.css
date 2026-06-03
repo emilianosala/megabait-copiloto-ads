@@ -166,6 +166,24 @@
   background: var(--accent-hover);
 }
 
+.reconnectButton {
+  display: inline-block;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 7px 16px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  align-self: flex-start;
+}
+
+.reconnectButton:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
 .accountsList {
   display: flex;
   flex-direction: column;
