@@ -253,13 +253,14 @@ Convertir el agente de "chat con contexto" a "analista senior de marketing digit
 **Por qué es de los items más importantes:** ningún MCP de plataforma te lo da. Es información del negocio del cliente, no de las plataformas. Es lo que permite el discurso "Meta dice $7k, Google dice $6k, en realidad facturaste $10k — hay $3k de solapamiento". Es lo que justifica que el cliente te pague mensual.
 
 ### Implementación por fases
-1. **Fase 1: CSV upload** — universal, simple, funciona con cualquier negocio
+1. ~~**Fase 1: CSV upload**~~ ✅ **COMPLETADO**
+   - Tabla `sales_data` con RLS multi-tenant (`supabase/003_sales_data.sql`)
+   - Upload en edit page con mapping flexible de columnas (fecha, monto, producto, moneda por cliente)
+   - Parseo robusto: formatos de fecha DD/MM/YYYY e ISO, montos europeos/americanos
+   - Tool `get_sales_data` en el chat: por período y granularidad (total/daily/weekly/monthly)
+   - System prompt avisa si hay datos cargados y guía al agente a calcular ROAS real
 2. **Fase 2: Shopify** — API directa, conector OAuth
 3. **Fase 3: WooCommerce, Tiendanube, otros**
-
-### Modelo de datos
-- Tabla `sales_data`: `client_id`, fecha, monto, fuente (Shopify/manual/etc), producto opcional
-- El agente cruza con métricas de plataformas para reportar ROAS real
 
 ---
 
