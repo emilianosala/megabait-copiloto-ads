@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import styles from './dashboard.module.css';
+import MegabaitLogo from '@/components/MegabaitLogo';
 
 interface Client {
   id: string;
@@ -36,9 +37,7 @@ function DashboardContent() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <div className={styles.logo}>
-          MEGA<span>BAIT</span>
-        </div>
+        <MegabaitLogo height={30} />
         <div className={styles.headerActions}>
           <button className={styles.logoutButton} onClick={handleLogout}>
             Salir

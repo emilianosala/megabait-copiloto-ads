@@ -12,17 +12,6 @@
   background: var(--bg-surface);
 }
 
-.logo {
-  font-family: 'Space Mono', monospace;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: -0.5px;
-}
-
-.logo span {
-  color: var(--text-secondary);
-}
 
 .newButton {
   background: var(--accent);

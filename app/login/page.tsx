@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import styles from './login.module.css';
+import MegabaitLogo from '@/components/MegabaitLogo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -46,7 +47,7 @@ export default function LoginPage() {
     <div className={styles.container}>
       <div className={styles.box}>
         <div className={styles.logo}>
-          MEGA<span>BAIT</span>
+          <MegabaitLogo height={44} />
         </div>
         <div className={styles.tabs}>
           <button

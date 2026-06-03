@@ -1,0 +1,47 @@
+@keyframes goldPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px #FFD700) drop-shadow(0 0 14px #B8860B);
+    opacity: 0.85;
+  }
+  50% {
+    filter: drop-shadow(0 0 12px #FFD700) drop-shadow(0 0 28px #FFD700) drop-shadow(0 0 45px #B8860B);
+    opacity: 1;
+  }
+}
+
+@keyframes goldPulseFooter {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.7)) drop-shadow(0 0 14px rgba(184, 134, 11, 0.7));
+    opacity: 0.85;
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.7)) drop-shadow(0 0 28px rgba(255, 215, 0, 0.7)) drop-shadow(0 0 45px rgba(184, 134, 11, 0.7));
+    opacity: 1;
+  }
+}
+
+.green {
+  filter: drop-shadow(0 0 8px #39ff14) drop-shadow(0 0 18px #22cc00);
+}
+
+.greenFooter {
+  filter: drop-shadow(0 0 8px rgba(57, 255, 20, 0.7)) drop-shadow(0 0 18px rgba(34, 204, 0, 0.7));
+}
+
+.goldA {
+  animation: goldPulse 2.4s ease-in-out infinite;
+}
+
+.goldI {
+  animation: goldPulse 2.4s ease-in-out infinite;
+  animation-delay: 0.15s;
+}
+
+.goldAFooter {
+  animation: goldPulseFooter 2.4s ease-in-out infinite;
+}
+
+.goldIFooter {
+  animation: goldPulseFooter 2.4s ease-in-out infinite;
+  animation-delay: 0.15s;
+}
