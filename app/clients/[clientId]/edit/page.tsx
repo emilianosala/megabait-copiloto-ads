@@ -18,6 +18,23 @@ interface MetaAccount {
   account_status: number;
 }
 
+interface SalesSummary {
+  rowCount: number;
+  dateRange: { min: string; max: string };
+  totalByCurrency: Record<string, number>;
+}
+
+interface SalesMapping {
+  date: string;
+  amount: string;
+  product: string;
+  currencyMode: 'fixed' | 'column';
+  currencyFixed: string;
+  currencyColumn: string;
+}
+
+const CURRENCIES = ['USD', 'ARS', 'EUR', 'BRL', 'MXN', 'CLP', 'COP', 'UYU'];
+
 function EditClientContent() {
   const { clientId } = useParams();
   const router = useRouter();
@@ -31,6 +48,21 @@ function EditClientContent() {
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [metaAccounts, setMetaAccounts] = useState<MetaAccount[] | null>(null);
   const [metaAccountsError, setMetaAccountsError] = useState<string | null>(null);
+
+  const [salesSummary, setSalesSummary] = useState<SalesSummary | null | false>(false);
+  const [uploadStep, setUploadStep] = useState<'idle' | 'mapping' | 'saving'>('idle');
+  const [csvText, setCsvText] = useState('');
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvPreview, setCsvPreview] = useState<string[][]>([]);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [mapping, setMapping] = useState<SalesMapping>({
+    date: '',
+    amount: '',
+    product: '',
+    currencyMode: 'fixed',
+    currencyFixed: 'USD',
+    currencyColumn: '',
+  });
 
   const [form, setForm] = useState({
     name: '',
@@ -64,6 +96,50 @@ function EditClientContent() {
       .catch(() => setMetaAccountsError('Error al cargar cuentas de Meta'));
   }
 
+  function loadSalesSummary() {
+    fetch(`/api/clients/${clientId}/sales`)
+      .then((res) => res.json())
+      .then((data) => setSalesSummary(data ?? null));
+  }
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setCsvError(null);
+    const text = await file.text();
+    const res = await fetch(`/api/clients/${clientId}/sales/parse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csvText: text }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setCsvError(data.error); return; }
+    setCsvText(text);
+    setCsvHeaders(data.headers);
+    setCsvPreview(data.preview);
+    setMapping({ date: '', amount: '', product: '', currencyMode: 'fixed', currencyFixed: 'USD', currencyColumn: '' });
+    setUploadStep('mapping');
+  }
+
+  async function handleSaveCSV() {
+    setUploadStep('saving');
+    setCsvError(null);
+    const res = await fetch(`/api/clients/${clientId}/sales`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csvText, mapping }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setCsvError(data.error);
+      setUploadStep('mapping');
+      return;
+    }
+    setUploadStep('idle');
+    loadSalesSummary();
+  }
+
   useEffect(() => {
     fetch(`/api/clients/${clientId}`)
       .then((res) => res.json())
@@ -94,6 +170,8 @@ function EditClientContent() {
         setMetaConnected(data.connected);
         if (data.connected) loadMetaAccounts();
       });
+
+    loadSalesSummary();
   }, [clientId]);
 
   // Manejar el callback de OAuth: el backend redirige de vuelta a esta página
@@ -375,6 +453,139 @@ function EditClientContent() {
               >
                 Reconectar Meta Ads
               </a>
+            )}
+          </div>
+
+          {/* ── Sección Datos de Ventas ── */}
+          <div className={styles.accountsSection}>
+            <p className={styles.accountsSectionTitle}>Datos de Ventas Reales</p>
+
+            {/* Estado: cargando */}
+            {salesSummary === false && (
+              <p className={styles.accountsHint}>Cargando...</p>
+            )}
+
+            {/* Estado: sin datos y sin upload en curso */}
+            {salesSummary === null && uploadStep === 'idle' && (
+              <>
+                <p className={styles.accountsHint}>
+                  Subí un CSV con ventas reales para que Jair pueda calcular el ROAS verdadero independiente de Meta y Google.
+                </p>
+                <label className={styles.uploadLabel}>
+                  Subir CSV de ventas
+                  <input type="file" accept=".csv,.txt" onChange={handleFileSelect} style={{ display: 'none' }} />
+                </label>
+              </>
+            )}
+
+            {/* Estado: hay datos */}
+            {salesSummary && salesSummary !== false && uploadStep === 'idle' && (
+              <>
+                <div className={styles.salesSummary}>
+                  <span className={styles.salesSummaryTotal}>
+                    {Object.entries(salesSummary.totalByCurrency)
+                      .map(([currency, total]) => `${currency} ${total.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`)
+                      .join(' · ')}
+                  </span>
+                  <span>{salesSummary.rowCount} ventas · {salesSummary.dateRange.min} → {salesSummary.dateRange.max}</span>
+                </div>
+                <label className={styles.reconnectButton} style={{ cursor: 'pointer' }}>
+                  Agregar más datos
+                  <input type="file" accept=".csv,.txt" onChange={handleFileSelect} style={{ display: 'none' }} />
+                </label>
+              </>
+            )}
+
+            {/* Estado: mapping de columnas */}
+            {uploadStep === 'mapping' && (
+              <>
+                <p className={styles.accountsHint}>Indicá qué columna del CSV corresponde a cada campo.</p>
+
+                <div className={styles.mappingGrid}>
+                  <div className={styles.mappingField}>
+                    <label className={styles.mappingLabel}>Fecha *</label>
+                    <select
+                      className={styles.mappingSelect}
+                      value={mapping.date}
+                      onChange={(e) => setMapping((m) => ({ ...m, date: e.target.value }))}
+                    >
+                      <option value="">— elegir columna —</option>
+                      {csvHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+
+                  <div className={styles.mappingField}>
+                    <label className={styles.mappingLabel}>Monto *</label>
+                    <select
+                      className={styles.mappingSelect}
+                      value={mapping.amount}
+                      onChange={(e) => setMapping((m) => ({ ...m, amount: e.target.value }))}
+                    >
+                      <option value="">— elegir columna —</option>
+                      {csvHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+
+                  <div className={styles.mappingField}>
+                    <label className={styles.mappingLabel}>Producto (opcional)</label>
+                    <select
+                      className={styles.mappingSelect}
+                      value={mapping.product}
+                      onChange={(e) => setMapping((m) => ({ ...m, product: e.target.value }))}
+                    >
+                      <option value="">— ninguna —</option>
+                      {csvHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+
+                  <div className={styles.mappingField}>
+                    <label className={styles.mappingLabel}>Moneda</label>
+                    <select
+                      className={styles.mappingSelect}
+                      value={mapping.currencyFixed}
+                      onChange={(e) => setMapping((m) => ({ ...m, currencyFixed: e.target.value, currencyMode: 'fixed' }))}
+                    >
+                      {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className={styles.previewWrapper}>
+                  <p className={styles.accountsHint}>Vista previa — primeras {csvPreview.length} filas</p>
+                  <div className={styles.previewScroll}>
+                    <table className={styles.previewTable}>
+                      <thead>
+                        <tr>{csvHeaders.map((h) => <th key={h}>{h}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {csvPreview.map((row, i) => (
+                          <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {csvError && <p className={styles.accountsHint} style={{ color: 'var(--danger)' }}>{csvError}</p>}
+
+                <div className={styles.mappingActions}>
+                  <button
+                    className={styles.saveButton}
+                    onClick={handleSaveCSV}
+                    disabled={!mapping.date || !mapping.amount}
+                  >
+                    Confirmar e importar
+                  </button>
+                  <button className={styles.cancelButton} onClick={() => { setUploadStep('idle'); setCsvError(null); }}>
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Estado: guardando */}
+            {uploadStep === 'saving' && (
+              <p className={styles.accountsHint}>Importando datos...</p>
             )}
           </div>
 

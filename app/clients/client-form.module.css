@@ -213,6 +213,124 @@
   background: var(--accent-dim);
 }
 
+/* ── Sección datos de ventas ── */
+
+.uploadLabel {
+  display: inline-block;
+  background: var(--accent);
+  color: #111111;
+  font-weight: 700;
+  padding: 10px 24px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.uploadLabel:hover {
+  background: var(--accent-hover);
+}
+
+.salesSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 12px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.salesSummaryTotal {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: 'Space Mono', monospace;
+}
+
+.mappingGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.mappingField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mappingLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-family: 'Space Mono', monospace;
+}
+
+.mappingSelect {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.mappingSelect:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.previewWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.previewScroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.previewTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: 'Space Mono', monospace;
+  white-space: nowrap;
+}
+
+.previewTable th {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.previewTable td {
+  padding: 5px 10px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+}
+
+.previewTable tr:last-child td {
+  border-bottom: none;
+}
+
+.mappingActions {
+  display: flex;
+  gap: 8px;
+}
+
 .accountName {
   font-size: 14px;
   font-weight: 500;

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { anthropic } from '@/lib/anthropic';
 import { createSupabaseServer } from '@/lib/supabase-server';
+import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import { createGoogleAdsClient } from '@/lib/google-ads';
 import { getAccountInsights, getCampaigns } from '@/lib/meta-ads';
 import { logApiCall } from '@/lib/api-audit';
@@ -297,6 +298,144 @@ async function executeMetaTool(
   }
 }
 
+// ── Sales Tool ────────────────────────────────────────────────────────────────
+
+const SALES_DATE_PRESETS = ['last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'this_quarter'] as const;
+
+const SALES_TOOL: Anthropic.Tool = {
+  name: 'get_sales_data',
+  description: `Obtiene los datos de ventas reales del negocio (cargados por el analista, independientes de las plataformas de ads) para calcular ROAS verdadero y cruzar con gasto en Meta/Google.
+Usá esta tool cuando el analista pida ROAS real, ventas del período, o quiera cruzar ingresos reales con el gasto en plataformas.
+Para calcular ROAS real: ventas_totales / gasto_en_ads. Si ya obtuviste el gasto de get_meta_account_insights o Google Ads, podés calcularlo directamente con los datos de esta tool.`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      date_preset: {
+        type: 'string',
+        description: 'Período predefinido. Ignorar si se usan since/until.',
+        enum: SALES_DATE_PRESETS,
+      },
+      since: { type: 'string', description: 'Fecha inicio YYYY-MM-DD. Usar junto con until.' },
+      until: { type: 'string', description: 'Fecha fin YYYY-MM-DD. Usar junto con since.' },
+      granularity: {
+        type: 'string',
+        enum: ['total', 'monthly', 'weekly', 'daily'],
+        description: 'Nivel de detalle del desglose. Default: total.',
+      },
+    },
+  },
+};
+
+function resolveSalesDatePreset(preset: string): { since: string; until: string } {
+  const now = new Date();
+  const until = now.toISOString().split('T')[0];
+  const daysBack = (n: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - n);
+    return d.toISOString().split('T')[0];
+  };
+  switch (preset) {
+    case 'last_7d':  return { since: daysBack(7), until };
+    case 'last_14d': return { since: daysBack(14), until };
+    case 'last_30d': return { since: daysBack(30), until };
+    case 'last_90d': return { since: daysBack(90), until };
+    case 'this_month': {
+      const d = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { since: d.toISOString().split('T')[0], until };
+    }
+    case 'this_quarter': {
+      const q = Math.floor(now.getMonth() / 3);
+      const d = new Date(now.getFullYear(), q * 3, 1);
+      return { since: d.toISOString().split('T')[0], until };
+    }
+    default: return { since: daysBack(30), until };
+  }
+}
+
+async function executeSalesTool(
+  toolInput: Record<string, string>,
+  clientId: string,
+): Promise<string> {
+  try {
+    const admin = createSupabaseAdmin();
+    const { since, until } =
+      toolInput.since && toolInput.until
+        ? { since: toolInput.since, until: toolInput.until }
+        : resolveSalesDatePreset(toolInput.date_preset || 'last_30d');
+
+    const { data: sales, error } = await admin
+      .from('sales_data')
+      .select('date, amount, currency, product')
+      .eq('client_id', clientId)
+      .gte('date', since)
+      .lte('date', until)
+      .order('date');
+
+    if (error) return JSON.stringify({ error: error.message });
+
+    if (!sales || sales.length === 0) {
+      return JSON.stringify({
+        periodo: `${since} al ${until}`,
+        mensaje:
+          'No hay datos de ventas cargados para este período. El analista puede subir un CSV desde la página de edición del cliente.',
+      });
+    }
+
+    const totalByCurrency: Record<string, number> = {};
+    for (const row of sales) {
+      totalByCurrency[row.currency] =
+        (totalByCurrency[row.currency] || 0) + parseFloat(row.amount);
+    }
+
+    const granularity = toolInput.granularity || 'total';
+
+    if (granularity === 'total') {
+      return JSON.stringify({
+        periodo: `${since} al ${until}`,
+        total_transacciones: sales.length,
+        ventas_por_moneda: Object.fromEntries(
+          Object.entries(totalByCurrency).map(([k, v]) => [k, parseFloat(v.toFixed(2))]),
+        ),
+      });
+    }
+
+    // Desglose por período
+    const grouped: Record<string, { amount: number; count: number; currency: string }> = {};
+    for (const row of sales) {
+      const d = new Date(row.date + 'T00:00:00');
+      let key: string;
+      if (granularity === 'daily') {
+        key = row.date;
+      } else if (granularity === 'weekly') {
+        const ws = new Date(d);
+        ws.setDate(d.getDate() - d.getDay());
+        key = ws.toISOString().split('T')[0];
+      } else {
+        key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      }
+      if (!grouped[key]) grouped[key] = { amount: 0, count: 0, currency: row.currency };
+      grouped[key].amount += parseFloat(row.amount);
+      grouped[key].count += 1;
+    }
+
+    return JSON.stringify({
+      periodo: `${since} al ${until}`,
+      total_transacciones: sales.length,
+      ventas_por_moneda: Object.fromEntries(
+        Object.entries(totalByCurrency).map(([k, v]) => [k, parseFloat(v.toFixed(2))]),
+      ),
+      desglose: Object.entries(grouped).map(([k, v]) => ({
+        periodo: k,
+        ventas: parseFloat(v.amount.toFixed(2)),
+        moneda: v.currency,
+        transacciones: v.count,
+      })),
+    });
+  } catch (err: any) {
+    return JSON.stringify({ error: err.message || 'Error al consultar datos de ventas' });
+  }
+}
+
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
@@ -362,6 +501,14 @@ export async function POST(request: Request) {
   }
 
   const hasMetaAds = !!(client.meta_ads_account_id && metaAccessToken);
+
+  // Sales data: verificar si hay datos cargados para este cliente
+  const adminForSales = createSupabaseAdmin();
+  const { count: salesCount } = await adminForSales
+    .from('sales_data')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId);
+  const hasSalesData = (salesCount ?? 0) > 0;
 
   const systemMessage = `# IDENTIDAD
 
@@ -523,7 +670,15 @@ Este cliente **todavía no tiene Meta Ads conectado** en la plataforma. Si la co
 
 Respondé en español, profesional pero accesible. Sé directo. Si una respuesta corta alcanza, dala corta. Si el análisis requiere desarrollo, desarrollalo — pero sin relleno.
 
-Si el analista te pide algo que va contra los principios de arriba (pausar sin significancia, escalar agresivo, ejecutar sin aprobación, evitar declarar AI), explicás por qué no es buena idea antes de hacer lo que pide.`;
+Si el analista te pide algo que va contra los principios de arriba (pausar sin significancia, escalar agresivo, ejecutar sin aprobación, evitar declarar AI), explicás por qué no es buena idea antes de hacer lo que pide.
+
+# DATOS DE VENTAS REALES
+${hasSalesData ? `
+Este cliente tiene **datos de ventas reales** cargados (independientes de Meta/Google). Disponés de la tool \`get_sales_data\` para consultarlos.
+
+Usala para calcular ROAS real: ventas_reales / gasto_en_plataformas. Si tenés el gasto de Meta o Google de otra tool, cruzalo directamente.
+Ejemplo: "Meta reporta $5.000 de gasto y $35.000 en conversiones atribuidas. Las ventas reales del negocio fueron $28.000 — el ROAS real es 5.6x, no 7x."` : `
+Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analista quiere calcular ROAS real, puede subir un CSV desde la página de edición del cliente. Mencionalo cuando sea relevante — es una diferencia importante frente al ROAS que reportan las plataformas.`}`;
 
   // Ciclo de Tool Use
   // Necesario porque Claude puede encadenar múltiples tool calls
@@ -533,7 +688,10 @@ Si el analista te pide algo que va contra los principios de arriba (pausar sin s
     { role: 'user', content: message },
   ];
 
-  const tools = hasMetaAds ? META_ADS_TOOLS : [];
+  const tools: Anthropic.Tool[] = [
+    ...(hasMetaAds ? META_ADS_TOOLS : []),
+    ...(hasSalesData ? [SALES_TOOL] : []),
+  ];
   let assistantMessage = '';
   let continueLoop = true;
 
@@ -554,15 +712,23 @@ Si el analista te pide algo que va contra los principios de arriba (pausar sin s
 
       for (const block of response.content) {
         if (block.type === 'tool_use') {
-          const result = await executeMetaTool(
-            block.name,
-            block.input as Record<string, string>,
-            client.meta_ads_account_id,
-            metaAccessToken!,
-            user.id,
-            client.id,
-            client.organization_id,
-          );
+          let result: string;
+          if (block.name === 'get_sales_data') {
+            result = await executeSalesTool(
+              block.input as Record<string, string>,
+              client.id,
+            );
+          } else {
+            result = await executeMetaTool(
+              block.name,
+              block.input as Record<string, string>,
+              client.meta_ads_account_id,
+              metaAccessToken!,
+              user.id,
+              client.id,
+              client.organization_id,
+            );
+          }
 
           toolResults.push({
             type: 'tool_result',
