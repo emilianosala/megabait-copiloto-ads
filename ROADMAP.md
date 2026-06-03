@@ -126,6 +126,7 @@ La entidad dueña de los datos es la **organización** que paga la cuenta (agenc
 - Crear, editar, eliminar clientes
 - Campos: nombre, industria, descripción, objetivos, presupuesto, KPIs, restricciones
 - `google_ads_account_id` y `meta_ads_account_id` por cliente
+- Formulario de edición pre-cargado con datos existentes
 
 ### Chat con IA
 - Chat por cliente con contexto persistente del perfil
@@ -139,6 +140,7 @@ La entidad dueña de los datos es la **organización** que paga la cuenta (agenc
 - OAuth flow completo (auth → callback → guarda refresh_token)
 - Métricas de últimos 30 días en system prompt
 - Estado de conexión visible en dashboard
+- Botón "Reconectar Google Ads" en edición de cliente (P11 ✅)
 
 ### Integración Meta Ads
 - App en Meta for Developers con caso de uso "Marketing API"
@@ -146,6 +148,7 @@ La entidad dueña de los datos es la **organización** que paga la cuenta (agenc
 - Tool Use con `get_meta_account_insights` y `get_meta_campaigns`
 - Loop que soporta múltiples llamadas encadenadas
 - Estado de conexión visible en dashboard
+- Botón "Reconectar Meta Ads" en edición de cliente (P11 ✅)
 
 ### Base de datos
 - Tablas: `clients`, `conversations`, `google_connections`, `meta_connections`
@@ -164,6 +167,23 @@ La entidad dueña de los datos es la **organización** que paga la cuenta (agenc
 ### Páginas legales
 - `/privacy` y `/terms` en megabait.com.ar
 - Links en footer
+
+### P1 — System prompt rediseñado ✅
+- Personalidad: analista senior, tono profesional en español rioplatense
+- 7 principios analíticos: significancia estadística, rendimientos decrecientes, tiempo de aprendizaje, ventanas de atribución, calidad de creativo, métricas de vanidad vs negocio, no consolidar ad sets sin entender
+- 4 reglas de safety: no cambios masivos, no ejecución directa, declarar contenido AI, respetar rate limits
+- Posicionamiento Megabait: neutralidad de plataforma, medir con reglas del anunciante, diferencial vs competidores
+- Comportamiento esperado ante datos anómalos, insuficientes, cross-platform y oportunidades
+
+### P3 — Audit log ✅
+- `lib/api-audit.ts` implementado con cliente admin (bypass RLS)
+- Registra todas las llamadas a Meta Ads y Google Ads: plataforma, endpoint, params, resultado, `triggered_by`
+- Wired en el chat route para tool use (Meta) y system prompt (Google)
+- Tabla `api_audit_log` con `organization_id` para aislamiento multi-tenant
+
+### P11 — Botón Reconectar OAuth ✅
+- Botón "Reconectar Meta Ads" y "Reconectar Google Ads" en la página de edición de cliente
+- Visible solo cuando la conexión ya existe; reutiliza el mismo flow OAuth (upsert en callback)
 
 ---
 
@@ -189,7 +209,7 @@ Orden de rotación, de mayor a menor riesgo:
 
 ---
 
-## 📋 P1 — System prompt rediseñado
+## ✅ P1 — System prompt rediseñado (COMPLETADO — ver sección ✅ COMPLETADO)
 
 Convertir el agente de "chat con contexto" a "analista senior de marketing digital con criterio Megabait". **Es el pilar #3 (criterio analítico codificado).**
 
@@ -287,9 +307,9 @@ Construir la infraestructura que hace que tu producto sea **demostrable y vendib
 - Es **producto**, no solo trust. Vende.
 
 ### Cómo se traduce en código (orden sugerido)
-1. Audit log primero — barato, alto valor, base para todo lo demás.
-2. Action approval gates en backend — antes de implementar P4.
-3. Rate limiting middleware.
+1. ~~Audit log primero~~ ✅ **COMPLETADO** — `lib/api-audit.ts` wired en chat route.
+2. Rate limiting middleware — próximo.
+3. Action approval gates en backend — antes de implementar P4.
 4. AI Content Label — cuando se implemente P16.
 5. System Users — cuando aparezca el primer cliente que lo necesite.
 
@@ -402,7 +422,7 @@ Cuando ya hay producto sellable y billing, sin esto no podés onboardear usuario
 
 ---
 
-## 📋 P11 — Botón Reconectar OAuth
+## ✅ P11 — Botón Reconectar OAuth (COMPLETADO — ver sección ✅ COMPLETADO)
 
 En el dashboard, junto a "Meta Ads conectado" / "Google Ads conectado", agregar botón secundario "Reconectar" que redirija al flow OAuth.
 
