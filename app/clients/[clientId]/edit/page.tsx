@@ -49,7 +49,8 @@ function EditClientContent() {
   const [metaAccounts, setMetaAccounts] = useState<MetaAccount[] | null>(null);
   const [metaAccountsError, setMetaAccountsError] = useState<string | null>(null);
 
-  const [salesSummary, setSalesSummary] = useState<SalesSummary | null | false>(false);
+  const [salesSummary, setSalesSummary] = useState<SalesSummary | null>(null);
+  const [salesLoading, setSalesLoading] = useState(true);
   const [uploadStep, setUploadStep] = useState<'idle' | 'mapping' | 'saving'>('idle');
   const [csvText, setCsvText] = useState('');
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
@@ -97,9 +98,14 @@ function EditClientContent() {
   }
 
   function loadSalesSummary() {
+    setSalesLoading(true);
     fetch(`/api/clients/${clientId}/sales`)
       .then((res) => res.json())
-      .then((data) => setSalesSummary(data ?? null));
+      .then((data) => {
+        setSalesSummary(data ?? null);
+        setSalesLoading(false);
+      })
+      .catch(() => setSalesLoading(false));
   }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -461,12 +467,12 @@ function EditClientContent() {
             <p className={styles.accountsSectionTitle}>Datos de Ventas Reales</p>
 
             {/* Estado: cargando */}
-            {salesSummary === false && (
+            {salesLoading && (
               <p className={styles.accountsHint}>Cargando...</p>
             )}
 
             {/* Estado: sin datos y sin upload en curso */}
-            {salesSummary === null && uploadStep === 'idle' && (
+            {!salesLoading && salesSummary === null && uploadStep === 'idle' && (
               <>
                 <p className={styles.accountsHint}>
                   Subí un CSV con ventas reales para que Jair pueda calcular el ROAS verdadero independiente de Meta y Google.
@@ -479,7 +485,7 @@ function EditClientContent() {
             )}
 
             {/* Estado: hay datos */}
-            {salesSummary && salesSummary !== false && uploadStep === 'idle' && (
+            {!salesLoading && salesSummary !== null && uploadStep === 'idle' && (
               <>
                 <div className={styles.salesSummary}>
                   <span className={styles.salesSummaryTotal}>
