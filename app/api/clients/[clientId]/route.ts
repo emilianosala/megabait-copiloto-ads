@@ -33,10 +33,15 @@ export async function PATCH(
   { params }: { params: Promise<{ clientId: string }> },
 ) {
   const { clientId } = await params;
-  const supabase = await createSupabaseServer();
-  const body = await request.json();
 
-  const { data, error } = await supabase
+  const supabase = await createSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  const body = await request.json();
+  const admin = createSupabaseAdmin();
+
+  const { data, error } = await admin
     .from('clients')
     .update(body)
     .eq('id', clientId)
@@ -55,9 +60,13 @@ export async function DELETE(
   { params }: { params: Promise<{ clientId: string }> },
 ) {
   const { clientId } = await params;
-  const supabase = await createSupabaseServer();
 
-  const { error } = await supabase.from('clients').delete().eq('id', clientId);
+  const supabase = await createSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  const admin = createSupabaseAdmin();
+  const { error } = await admin.from('clients').delete().eq('id', clientId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
