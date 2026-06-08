@@ -439,6 +439,7 @@ async function executeSalesTool(
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  try {
   const { clientId, message, history } = await request.json();
   const supabase = await createSupabaseServer();
 
@@ -698,7 +699,7 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
 
   while (continueLoop) {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2048,
       system: systemMessage,
       messages,
@@ -781,4 +782,11 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
       'X-Accel-Buffering': 'no',
     },
   });
+  } catch (err: any) {
+    console.error('[chat] Error inesperado:', err);
+    return NextResponse.json(
+      { error: err.message || 'Error interno del servidor' },
+      { status: 500 },
+    );
+  }
 }

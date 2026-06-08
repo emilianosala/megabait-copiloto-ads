@@ -92,7 +92,8 @@ export default function ChatPage() {
       });
 
       if (!res.ok || !res.body) {
-        throw new Error('Error en la respuesta del servidor');
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error del servidor (${res.status})`);
       }
 
       // Agregar mensaje vacío del asistente — se irá llenando con los chunks
@@ -121,6 +122,10 @@ export default function ChatPage() {
         // El usuario detuvo el stream — el mensaje parcial queda visible
       } else {
         console.error('[chat] Error:', err);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: `⚠️ ${err.message}` },
+        ]);
       }
     } finally {
       setLoading(false);
