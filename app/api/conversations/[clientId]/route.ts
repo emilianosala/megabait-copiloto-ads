@@ -1,4 +1,5 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
+import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 
 export async function GET(
@@ -6,9 +7,13 @@ export async function GET(
   { params }: { params: Promise<{ clientId: string }> },
 ) {
   const { clientId } = await params;
-  const supabase = await createSupabaseServer();
 
-  const { data, error } = await supabase
+  const supabase = await createSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  const admin = createSupabaseAdmin();
+  const { data, error } = await admin
     .from('conversations')
     .select('role, content')
     .eq('client_id', clientId)

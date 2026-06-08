@@ -449,8 +449,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 
-  // Traer contexto del cliente (RLS garantiza que pertenece al usuario)
-  const { data: client, error } = await supabase
+  // Traer contexto del cliente via admin (bypass RLS)
+  const adminForClient = createSupabaseAdmin();
+  const { data: client, error } = await adminForClient
     .from('clients')
     .select('*')
     .eq('id', clientId)

@@ -34,7 +34,7 @@ export default function ChatPage() {
 
     fetch(`/api/conversations/${clientId}`)
       .then((res) => res.json())
-      .then((data) => setMessages(data));
+      .then((data) => setMessages(Array.isArray(data) ? data : []));
   }, [clientId]);
 
   useEffect(() => {
