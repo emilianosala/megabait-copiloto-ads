@@ -467,7 +467,7 @@ export async function POST(request: Request) {
   // Google Ads: sigue inyectando en el system prompt (Developer Token pendiente)
   let metricsBlock = '';
   if (client.google_ads_account_id) {
-    const { data: connection } = await supabase
+    const { data: connection } = await adminForClient
       .from('google_connections')
       .select('refresh_token')
       .eq('client_id', client.id)
@@ -490,7 +490,7 @@ export async function POST(request: Request) {
   // Meta Ads: obtener token para pasarlo a las tools (no pre-calculamos métricas)
   let metaAccessToken: string | null = null;
   if (client.meta_ads_account_id) {
-    const { data: metaConnection } = await supabase
+    const { data: metaConnection } = await adminForClient
       .from('meta_connections')
       .select('access_token')
       .eq('client_id', client.id)
@@ -765,7 +765,7 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
       }
 
       // Guardar en Supabase una vez que se enviaron todos los chunks
-      await supabase.from('conversations').insert([
+      await adminForClient.from('conversations').insert([
         { client_id: clientId, user_id: user.id, role: 'user', content: message },
         { client_id: clientId, user_id: user.id, role: 'assistant', content: assistantMessage },
       ]);

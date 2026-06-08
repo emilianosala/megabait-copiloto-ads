@@ -34,14 +34,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 
-  const orgId = await getUserOrgId(supabase, user.id);
+  const admin = createSupabaseAdmin();
+  const orgId = await getUserOrgId(admin, user.id);
   if (!orgId) {
     return NextResponse.json({ error: 'Organización no encontrada' }, { status: 500 });
   }
 
   const body = await request.json();
 
-  const { data, error } = await supabase
+  const { data, error } = await admin
     .from('clients')
     .insert([{
       organization_id: orgId,
