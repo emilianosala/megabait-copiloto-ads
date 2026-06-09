@@ -359,15 +359,37 @@ Para escritura: el MCP no soporta hoy → integración custom cuando llegue el D
 
 ---
 
-## 📋 P7 — Reporting conversacional
+## 📋 P7 — Reportes visuales en el chat
 
-En lugar de una interfaz tradicional de reporting (Looker Studio, Power BI), el analista le pide el reporte a Jair en lenguaje natural: "dame el reporte de las últimas 4 semanas con desglose por campaña y comparación contra el período anterior".
+El analista le pide a Jair un reporte en lenguaje natural ("armame un reporte de las últimas 4 semanas con desglose por campaña") y Jair lo genera **con gráficos y tablas directamente en el chat** — sin Looker Studio, sin Power BI, sin exportar nada.
 
-Jair llama las herramientas necesarias, cruza los datos y presenta el resultado estructurado en el chat. Ventaja: ilimitadamente flexible sin necesidad de construir cada filtro/vista.
+### Cómo funciona
+- Jair consulta las tools necesarias (Meta, Google Ads, ventas reales) para recopilar los datos
+- En su respuesta incluye bloques ` ```chart ` con JSON estructurado (tipo de gráfico + datos)
+- El frontend detecta esos bloques y los renderiza con **Recharts** en lugar de mostrarlos como código
+- El analista ve los gráficos inline en la conversación, igual que ve texto
 
-- Funciona sobre la arquitectura de tool use existente
-- Se enriquece a medida que se agregan P5 (GA4), P6 (Google Ads tools) y P2 (ventas reales)
-- Exportación PDF como mejora posterior (html-to-pdf o similar)
+### Tipos de visualización
+- Barras (comparación de campañas, períodos)
+- Líneas (evolución temporal)
+- Torta / donut (distribución de gasto o ventas por fuente)
+- Tablas (detalle de campañas con métricas)
+
+### Schema del bloque chart
+```json
+{
+  "type": "bar" | "line" | "pie" | "table",
+  "title": "Ventas por semana — mayo 2026",
+  "data": [...],
+  "xKey": "periodo",
+  "yKey": "ventas"
+}
+```
+
+### Dependencias
+- Se enriquece con P5 (GA4) y P6 (Google Ads tools) — más fuentes = reportes más completos
+- P2 Fase 1 ya está: las ventas reales ya son una fuente disponible
+- Exportación PDF como mejora posterior (html-to-pdf)
 
 ---
 
