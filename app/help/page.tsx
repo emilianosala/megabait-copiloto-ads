@@ -41,7 +41,7 @@ const SECTIONS = [
   {
     title: 'Reportes interactivos',
     icon: '📋',
-    description: 'Jair genera reportes con gráficos que se abren en una página separada. Son interactivos (podés cambiar el período) y compartibles con el cliente sin que tenga que loguearse.',
+    description: 'Jair genera reportes con gráficos que se abren en una página separada. Son interactivos (podés cambiar el período), exportables a PDF y compartibles con el cliente — solo copiás el link desde el botón "Copiar link" del reporte, sin que el cliente tenga que loguearse.',
     examples: [
       'Armame un reporte del último mes con gráfico de campañas y ventas',
       'Generame un informe para compartir con el cliente',

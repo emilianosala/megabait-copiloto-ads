@@ -344,6 +344,14 @@ function ReportContent() {
               onChange={e => setUntil(e.target.value)}
             />
           </div>
+          <button
+            className={styles.exportButton}
+            onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+            }}
+          >
+            Copiar link
+          </button>
           <button className={styles.exportButton} onClick={() => window.print()}>
             Exportar PDF
           </button>
