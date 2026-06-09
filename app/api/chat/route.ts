@@ -457,8 +457,13 @@ Secciones posibles:
     type: 'object' as const,
     properties: {
       title: { type: 'string', description: 'Título del reporte' },
-      since: { type: 'string', description: 'Fecha inicio YYYY-MM-DD' },
-      until: { type: 'string', description: 'Fecha fin YYYY-MM-DD' },
+      date_preset: {
+        type: 'string',
+        enum: ['last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'this_quarter'],
+        description: 'Período predefinido. Preferir esto sobre since/until para evitar errores de cálculo. Usar last_30d para "último mes", this_month para el mes en curso, last_month para el mes anterior completo.',
+      },
+      since: { type: 'string', description: 'Fecha inicio YYYY-MM-DD. Solo usar si el analista pide un rango específico que no cubre date_preset.' },
+      until: { type: 'string', description: 'Fecha fin YYYY-MM-DD. Solo usar si el analista pide un rango específico que no cubre date_preset.' },
       sections: {
         type: 'array',
         description: 'Secciones del reporte en orden de aparición',
@@ -494,6 +499,39 @@ Secciones posibles:
   },
 };
 
+function resolveReportDates(input: Record<string, any>): { since: string; until: string } {
+  if (input.since && input.until) return { since: input.since, until: input.until };
+
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const daysBack = (n: number) => {
+    const d = new Date(now); d.setDate(d.getDate() - n);
+    return d.toISOString().split('T')[0];
+  };
+
+  switch (input.date_preset) {
+    case 'last_7d':   return { since: daysBack(7), until: today };
+    case 'last_14d':  return { since: daysBack(14), until: today };
+    case 'last_30d':  return { since: daysBack(30), until: today };
+    case 'last_90d':  return { since: daysBack(90), until: today };
+    case 'this_month': {
+      const d = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { since: d.toISOString().split('T')[0], until: today };
+    }
+    case 'last_month': {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const last  = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { since: first.toISOString().split('T')[0], until: last.toISOString().split('T')[0] };
+    }
+    case 'this_quarter': {
+      const q = Math.floor(now.getMonth() / 3);
+      const d = new Date(now.getFullYear(), q * 3, 1);
+      return { since: d.toISOString().split('T')[0], until: today };
+    }
+    default: return { since: daysBack(30), until: today };
+  }
+}
+
 async function executeCreateReport(
   toolInput: Record<string, any>,
   clientId: string,
@@ -516,13 +554,15 @@ async function executeCreateReport(
     if (hasMetaConn) sources.push('meta');
     if (hasSalesConn) sources.push('sales');
 
+    const { since, until } = resolveReportDates(toolInput);
+
     const { data, error } = await admin.from('reports').insert({
       client_id: clientId,
       organization_id: client.organization_id,
       created_by: userId,
       title: toolInput.title,
-      initial_since: toolInput.since,
-      initial_until: toolInput.until,
+      initial_since: since,
+      initial_until: until,
       sources,
       sections: toolInput.sections,
     }).select('id').single();
