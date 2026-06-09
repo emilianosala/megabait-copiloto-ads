@@ -440,6 +440,101 @@ async function executeSalesTool(
   }
 }
 
+// ── Create Report Tool ────────────────────────────────────────────────────────
+
+const CREATE_REPORT_TOOL: Anthropic.Tool = {
+  name: 'create_report',
+  description: `Crea un reporte interactivo y compartible con el cliente. El reporte abre en una página separada donde el analista puede cambiar el período con un selector de fechas y exportar a PDF o CSV.
+Usá esta tool cuando el analista pida armar, generar o crear un reporte.
+Definí las secciones según qué datos están disponibles.
+Secciones posibles:
+- kpi_row: tarjetas con métricas clave (una por fuente de datos)
+- bar_chart: gráfico de barras (por campaña o por semana)
+- line_chart: evolución temporal (por día o semana)
+- pie_chart: distribución (por campaña)
+- table: tabla detallada de campañas`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      title: { type: 'string', description: 'Título del reporte' },
+      since: { type: 'string', description: 'Fecha inicio YYYY-MM-DD' },
+      until: { type: 'string', description: 'Fecha fin YYYY-MM-DD' },
+      sections: {
+        type: 'array',
+        description: 'Secciones del reporte en orden de aparición',
+        items: {
+          type: 'object' as const,
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['kpi_row', 'bar_chart', 'line_chart', 'pie_chart', 'table'],
+            },
+            title: { type: 'string' },
+            source: { type: 'string', enum: ['meta', 'sales'] },
+            metric: {
+              type: 'string',
+              enum: ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'amount', 'count'],
+              description: 'Métrica a graficar (para bar/line/pie)',
+            },
+            dimension: {
+              type: 'string',
+              enum: ['campaign', 'day', 'week'],
+              description: 'Dimensión del eje X (para bar/line/pie)',
+            },
+          },
+          required: ['type', 'source'],
+        },
+      },
+    },
+    required: ['title', 'since', 'until', 'sections'],
+  },
+};
+
+async function executeCreateReport(
+  toolInput: Record<string, any>,
+  clientId: string,
+  userId: string,
+  baseUrl: string,
+): Promise<string> {
+  try {
+    const admin = createSupabaseAdmin();
+    const { data: client } = await admin
+      .from('clients')
+      .select('organization_id, meta_ads_account_id')
+      .eq('id', clientId)
+      .single();
+
+    if (!client) return JSON.stringify({ error: 'Cliente no encontrado' });
+
+    const sources: string[] = [];
+    const hasMetaConn = !!(toolInput.sections?.some((s: any) => s.source === 'meta') && client.meta_ads_account_id);
+    const hasSalesConn = toolInput.sections?.some((s: any) => s.source === 'sales');
+    if (hasMetaConn) sources.push('meta');
+    if (hasSalesConn) sources.push('sales');
+
+    const { data, error } = await admin.from('reports').insert({
+      client_id: clientId,
+      organization_id: client.organization_id,
+      created_by: userId,
+      title: toolInput.title,
+      initial_since: toolInput.since,
+      initial_until: toolInput.until,
+      sources,
+      sections: toolInput.sections,
+    }).select('id').single();
+
+    if (error) return JSON.stringify({ error: error.message });
+
+    return JSON.stringify({
+      success: true,
+      report_url: `${baseUrl}/reports/${data.id}`,
+      message: `Reporte creado exitosamente. El analista puede abrirlo en: ${baseUrl}/reports/${data.id}`,
+    });
+  } catch (err: any) {
+    return JSON.stringify({ error: err.message });
+  }
+}
+
 // ── Handler principal ─────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
@@ -678,6 +773,11 @@ Respondé en español, profesional pero accesible. Sé directo. Si una respuesta
 
 Si el analista te pide algo que va contra los principios de arriba (pausar sin significancia, escalar agresivo, ejecutar sin aprobación, evitar declarar AI), explicás por qué no es buena idea antes de hacer lo que pide.
 
+# REPORTES
+Podés generar reportes interactivos y compartibles usando la tool \`create_report\`. El reporte abre en una página separada donde el analista puede cambiar el período y exportar a PDF o CSV.
+Usá \`create_report\` cuando el analista pida armar un reporte, generar un informe, o quiera algo para compartir con su cliente.
+Antes de crear el reporte, consultá los datos necesarios (Meta, ventas) para saber qué fuentes están disponibles y definir las secciones apropiadas.
+
 # DATOS DE VENTAS REALES
 ${hasSalesData ? `
 Este cliente tiene **datos de ventas reales** cargados (independientes de Meta/Google). Disponés de la tool \`get_sales_data\` para consultarlos.
@@ -694,9 +794,12 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
     { role: 'user', content: message },
   ];
 
+  const origin = new URL(request.url).origin;
+
   const tools: Anthropic.Tool[] = [
     ...(hasMetaAds ? META_ADS_TOOLS : []),
     ...(hasSalesData ? [SALES_TOOL] : []),
+    CREATE_REPORT_TOOL,
   ];
   let assistantMessage = '';
   let continueLoop = true;
@@ -723,6 +826,13 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
             result = await executeSalesTool(
               block.input as Record<string, string>,
               client.id,
+            );
+          } else if (block.name === 'create_report') {
+            result = await executeCreateReport(
+              block.input as Record<string, any>,
+              client.id,
+              user.id,
+              origin,
             );
           } else {
             result = await executeMetaTool(
