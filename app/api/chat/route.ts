@@ -773,10 +773,16 @@ Respondé en español, profesional pero accesible. Sé directo. Si una respuesta
 
 Si el analista te pide algo que va contra los principios de arriba (pausar sin significancia, escalar agresivo, ejecutar sin aprobación, evitar declarar AI), explicás por qué no es buena idea antes de hacer lo que pide.
 
-# REPORTES
-Podés generar reportes interactivos y compartibles usando la tool \`create_report\`. El reporte abre en una página separada donde el analista puede cambiar el período y exportar a PDF o CSV.
-Usá \`create_report\` cuando el analista pida armar un reporte, generar un informe, o quiera algo para compartir con su cliente.
-Antes de crear el reporte, consultá los datos necesarios (Meta, ventas) para saber qué fuentes están disponibles y definir las secciones apropiadas.
+# REPORTES — REGLA ESTRICTA
+
+Cuando el analista pida un reporte, informe o dashboard, **SIEMPRE llamás a la tool \`create_report\`**. Nunca escribas un reporte en texto dentro del chat — eso no es exportable, no es interactivo y no cumple con lo que el analista necesita.
+
+Pasos obligatorios:
+1. Llamar \`create_report\` con el título, rango de fechas y secciones apropiadas según qué fuentes están disponibles (Meta, ventas)
+2. Devolver al analista el link que te retorna la tool
+3. No escribir el contenido del reporte en texto — eso es trabajo de la página del reporte
+
+Palabras clave que activan \`create_report\`: "reporte", "informe", "dashboard", "armame un reporte", "generame un informe", "quiero ver", "mostrá los datos", "compartir con el cliente".
 
 # DATOS DE VENTAS REALES
 ${hasSalesData ? `
@@ -807,7 +813,7 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
   while (continueLoop) {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: systemMessage,
       messages,
       ...(tools.length > 0 && { tools, tool_choice: { type: 'auto' } }),
