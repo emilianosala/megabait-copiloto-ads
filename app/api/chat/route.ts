@@ -365,7 +365,7 @@ async function executeSalesTool(
 
     const { data: sales, error } = await admin
       .from('sales_data')
-      .select('date, amount, currency, product')
+      .select('date, amount, currency, product, upload_note')
       .eq('client_id', clientId)
       .gte('date', since)
       .lte('date', until)
@@ -389,6 +389,8 @@ async function executeSalesTool(
 
     const granularity = toolInput.granularity || 'total';
 
+    const notes = [...new Set(sales.map((r: any) => r.upload_note).filter(Boolean))];
+
     if (granularity === 'total') {
       return JSON.stringify({
         periodo: `${since} al ${until}`,
@@ -396,6 +398,7 @@ async function executeSalesTool(
         ventas_por_moneda: Object.fromEntries(
           Object.entries(totalByCurrency).map(([k, v]) => [k, parseFloat(v.toFixed(2))]),
         ),
+        ...(notes.length > 0 && { notas_del_analista: notes }),
       });
     }
 
@@ -424,6 +427,7 @@ async function executeSalesTool(
       ventas_por_moneda: Object.fromEntries(
         Object.entries(totalByCurrency).map(([k, v]) => [k, parseFloat(v.toFixed(2))]),
       ),
+      ...(notes.length > 0 && { notas_del_analista: notes }),
       desglose: Object.entries(grouped).map(([k, v]) => ({
         periodo: k,
         ventas: parseFloat(v.amount.toFixed(2)),

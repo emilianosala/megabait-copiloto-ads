@@ -88,6 +88,7 @@ interface Mapping {
   currencyMode: 'fixed' | 'column';
   currencyFixed: string;
   currencyColumn?: string;
+  note?: string;
 }
 
 export async function POST(
@@ -148,6 +149,7 @@ export async function POST(
           : mapping.currencyFixed,
       product: productIdx >= 0 ? (fields[productIdx]?.trim() || null) : null,
       source: 'csv',
+      upload_note: mapping.note?.trim() || null,
     });
   }
 

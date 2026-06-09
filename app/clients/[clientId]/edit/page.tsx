@@ -31,6 +31,7 @@ interface SalesMapping {
   currencyMode: 'fixed' | 'column';
   currencyFixed: string;
   currencyColumn: string;
+  note: string;
 }
 
 const CURRENCIES = ['USD', 'ARS', 'EUR', 'BRL', 'MXN', 'CLP', 'COP', 'UYU'];
@@ -124,7 +125,7 @@ function EditClientContent() {
     setCsvText(text);
     setCsvHeaders(data.headers);
     setCsvPreview(data.preview);
-    setMapping({ date: '', amount: '', product: '', currencyMode: 'fixed', currencyFixed: 'USD', currencyColumn: '' });
+    setMapping({ date: '', amount: '', product: '', currencyMode: 'fixed', currencyFixed: 'USD', currencyColumn: '', note: '' });
     setUploadStep('mapping');
   }
 
@@ -554,6 +555,17 @@ function EditClientContent() {
                       {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
+                </div>
+
+                <div className={styles.mappingField} style={{ gridColumn: '1 / -1' }}>
+                  <label className={styles.mappingLabel}>Nota (opcional)</label>
+                  <input
+                    className={styles.mappingSelect}
+                    type="text"
+                    placeholder='Ej: "Ventas reales mayo 2026", "Test", "Shopify Q1"'
+                    value={mapping.note}
+                    onChange={(e) => setMapping((m) => ({ ...m, note: e.target.value }))}
+                  />
                 </div>
 
                 <div className={styles.previewWrapper}>
