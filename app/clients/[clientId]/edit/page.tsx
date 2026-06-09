@@ -64,6 +64,7 @@ function EditClientContent() {
     currencyMode: 'fixed',
     currencyFixed: 'USD',
     currencyColumn: '',
+    note: '',
   });
 
   const [form, setForm] = useState({
