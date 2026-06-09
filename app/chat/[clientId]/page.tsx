@@ -164,6 +164,13 @@ export default function ChatPage() {
             + Nueva
           </button>
         )}
+        <button
+          className={styles.newChatButton}
+          onClick={() => router.push('/help')}
+          title="Ver guía de Jair"
+        >
+          ?
+        </button>
         <div className={styles.dot} />
       </header>
 

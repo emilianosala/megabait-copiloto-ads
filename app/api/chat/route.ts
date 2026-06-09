@@ -481,6 +481,10 @@ Secciones posibles:
               enum: ['campaign', 'day', 'week'],
               description: 'Dimensión del eje X (para bar/line/pie)',
             },
+            color: {
+              type: 'string',
+              description: 'Color hex para el gráfico. Sugerencias: verde neon #39ff14, dorado #FFD700, azul #00bfff, rojo #ff6b6b, violeta #b39ddb. Si no se especifica, se usa el color por defecto de la fuente.',
+            },
           },
           required: ['type', 'source'],
         },
@@ -783,6 +787,8 @@ Pasos obligatorios:
 3. No escribir el contenido del reporte en texto — eso es trabajo de la página del reporte
 
 Palabras clave que activan \`create_report\`: "reporte", "informe", "dashboard", "armame un reporte", "generame un informe", "quiero ver", "mostrá los datos", "compartir con el cliente".
+
+Colores disponibles para secciones (campo \`color\` opcional): verde neon #39ff14, dorado #FFD700, azul #00bfff, rojo coral #ff6b6b, violeta #b39ddb, celeste #80deea, naranja #ffcc80. Si el analista no especifica colores, usá verde para Meta y dorado para ventas.
 
 # DATOS DE VENTAS REALES
 ${hasSalesData ? `

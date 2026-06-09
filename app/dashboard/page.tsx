@@ -39,6 +39,9 @@ function DashboardContent() {
       <header className={styles.header}>
         <MegabaitLogo height={30} />
         <div className={styles.headerActions}>
+          <button className={styles.logoutButton} onClick={() => router.push('/help')}>
+            ¿Qué puede hacer Jair?
+          </button>
           <button className={styles.logoutButton} onClick={handleLogout}>
             Salir
           </button>

@@ -17,6 +17,7 @@ interface ReportSection {
   source: 'meta' | 'sales';
   metric?: string;
   dimension?: 'campaign' | 'day' | 'week';
+  color?: string;
 }
 
 interface ReportConfig {
@@ -104,7 +105,7 @@ function SalesKpiRow({ data }: { data: SalesData }) {
   );
 }
 
-function MetaBarChart({ data, metric = 'spend', title }: { data: MetaData; metric: string; title: string }) {
+function MetaBarChart({ data, metric = 'spend', title, color = '#39ff14' }: { data: MetaData; metric: string; title: string; color?: string }) {
   if (!data.campaigns.length) return <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Sin campañas para este período.</p>;
   const chartData = data.campaigns.map(c => ({
     name: c.name.length > 20 ? c.name.slice(0, 20) + '…' : c.name,
@@ -117,7 +118,7 @@ function MetaBarChart({ data, metric = 'spend', title }: { data: MetaData; metri
         <XAxis dataKey="name" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
         <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
         <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
-        <Bar dataKey="value" name={metric} fill="#39ff14" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="value" name={metric} fill={color} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -138,7 +139,7 @@ function MetaPieChart({ data, metric = 'spend' }: { data: MetaData; metric: stri
   );
 }
 
-function SalesLineChart({ data, dimension = 'week' }: { data: SalesData; dimension: string }) {
+function SalesLineChart({ data, dimension = 'week', color = '#FFD700' }: { data: SalesData; dimension: string; color?: string }) {
   const chartData = dimension === 'day' ? data.by_day.map(d => ({ label: d.date, amount: d.amount }))
     : data.by_week.map(d => ({ label: d.week, amount: d.amount }));
   if (!chartData.length) return <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Sin datos de ventas para este período.</p>;
@@ -149,13 +150,13 @@ function SalesLineChart({ data, dimension = 'week' }: { data: SalesData; dimensi
         <XAxis dataKey="label" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} angle={-20} textAnchor="end" interval={Math.floor(chartData.length / 8)} />
         <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
         <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
-        <Line type="monotone" dataKey="amount" name={`Ventas (${data.currency})`} stroke="#FFD700" strokeWidth={2} dot={false} />
+        <Line type="monotone" dataKey="amount" name={`Ventas (${data.currency})`} stroke={color} strokeWidth={2} dot={false} />
       </LineChart>
     </ResponsiveContainer>
   );
 }
 
-function SalesBarChart({ data, dimension = 'week' }: { data: SalesData; dimension: string }) {
+function SalesBarChart({ data, dimension = 'week', color = '#FFD700' }: { data: SalesData; dimension: string; color?: string }) {
   const chartData = dimension === 'day' ? data.by_day.map(d => ({ label: d.date, amount: d.amount }))
     : data.by_week.map(d => ({ label: d.week, amount: d.amount }));
   if (!chartData.length) return null;
@@ -166,7 +167,7 @@ function SalesBarChart({ data, dimension = 'week' }: { data: SalesData; dimensio
         <XAxis dataKey="label" tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} angle={-20} textAnchor="end" interval={Math.floor(chartData.length / 8)} />
         <YAxis tick={{ fill: 'var(--text-secondary)', fontSize: 11 }} />
         <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
-        <Bar dataKey="amount" name={`Ventas (${data.currency})`} fill="#FFD700" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="amount" name={`Ventas (${data.currency})`} fill={color} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -252,12 +253,12 @@ function Section({ section, data }: { section: ReportSection; data: ReportData }
         return section.source === 'meta' ? <MetaKpiRow data={meta!} /> : <SalesKpiRow data={sales!} />;
       case 'bar_chart':
         return section.source === 'meta'
-          ? <MetaBarChart data={meta!} metric={section.metric ?? 'spend'} title={section.title ?? ''} />
-          : <SalesBarChart data={sales!} dimension={section.dimension ?? 'week'} />;
+          ? <MetaBarChart data={meta!} metric={section.metric ?? 'spend'} title={section.title ?? ''} color={section.color} />
+          : <SalesBarChart data={sales!} dimension={section.dimension ?? 'week'} color={section.color} />;
       case 'line_chart':
         return section.source === 'sales'
-          ? <SalesLineChart data={sales!} dimension={section.dimension ?? 'week'} />
-          : <MetaBarChart data={meta!} metric={section.metric ?? 'spend'} title={section.title ?? ''} />;
+          ? <SalesLineChart data={sales!} dimension={section.dimension ?? 'week'} color={section.color} />
+          : <MetaBarChart data={meta!} metric={section.metric ?? 'spend'} title={section.title ?? ''} color={section.color} />;
       case 'pie_chart':
         return section.source === 'meta' ? <MetaPieChart data={meta!} metric={section.metric ?? 'spend'} /> : null;
       case 'table':
