@@ -107,6 +107,53 @@
   font-size: 14px;
 }
 
+/* ── Carátula ── */
+
+.cover {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.coverLogos {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 8px;
+}
+
+.clientLogo {
+  height: 48px;
+  max-width: 180px;
+  object-fit: contain;
+}
+
+.coverTitle {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.coverClient {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-family: 'Space Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.coverPeriod {
+  font-size: 14px;
+  color: var(--accent);
+  font-family: 'Space Mono', monospace;
+}
+
 /* ── Secciones ── */
 
 .section {
@@ -231,7 +278,9 @@
   .header { position: static; }
   .exportButton, .dateInput, .dateSep, .dateLabel, .dateRange { display: none; }
   .page { background: white; }
-  .section { break-inside: avoid; border-color: #ddd; }
-  .kpiValue, .reportTitle, .table td { color: #111; }
-  .sectionTitle, .kpiLabel, .table th, .clientName, .footer { color: #555; }
+  .section, .cover { break-inside: avoid; border-color: #ddd; }
+  .cover { page-break-after: always; }
+  .kpiValue, .reportTitle, .table td, .coverTitle { color: #111; }
+  .sectionTitle, .kpiLabel, .table th, .clientName, .footer, .coverClient { color: #555; }
+  .coverPeriod { color: #333; }
 }

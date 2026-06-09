@@ -77,6 +77,7 @@ function EditClientContent() {
     restrictions: '',
     google_ads_account_id: '',
     meta_ads_account_id: '',
+    logo_url: '',
   });
 
   function loadGoogleAccounts() {
@@ -162,6 +163,7 @@ function EditClientContent() {
           restrictions: data.restrictions ?? '',
           google_ads_account_id: data.google_ads_account_id ?? '',
           meta_ads_account_id: data.meta_ads_account_id ?? '',
+          logo_url: data.logo_url ?? '',
         }),
       );
 
@@ -273,6 +275,25 @@ function EditClientContent() {
               onChange={handleChange}
             />
           </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Logo del cliente (URL)</label>
+            <input
+              className={styles.input}
+              name="logo_url"
+              placeholder="https://ejemplo.com/logo.png"
+              value={form.logo_url}
+              onChange={handleChange}
+            />
+            {form.logo_url && (
+              <img
+                src={form.logo_url}
+                alt="Vista previa del logo"
+                style={{ height: 40, marginTop: 8, objectFit: 'contain', borderRadius: 4 }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            )}
+          </div>
+
           <div className={styles.field}>
             <label className={styles.label}>Descripción del negocio</label>
             <textarea

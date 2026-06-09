@@ -19,7 +19,7 @@ export async function GET(
 
   const { data: client } = await admin
     .from('clients')
-    .select('name, industry')
+    .select('name, industry, logo_url')
     .eq('id', data.client_id)
     .single();
 

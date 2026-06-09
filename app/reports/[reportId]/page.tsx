@@ -27,7 +27,7 @@ interface ReportConfig {
   initial_until: string;
   sources: string[];
   sections: ReportSection[];
-  client: { name: string; industry: string };
+  client: { name: string; industry: string; logo_url?: string };
   created_at: string;
 }
 
@@ -47,6 +47,13 @@ interface ReportData { meta?: MetaData | null; sales?: SalesData | null; }
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const COLORS = ['#39ff14', '#FFD700', '#00bfff', '#ff6b6b', '#b39ddb', '#80deea', '#ffcc80', '#a5d6a7'];
+
+const MONTHS_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function formatDateEs(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return `${day} de ${MONTHS_ES[month - 1]} de ${year}`;
+}
 
 function fmt(n: number, decimals = 2) {
   return n.toLocaleString('es-AR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -360,6 +367,25 @@ function ReportContent() {
       </header>
 
       <div className={styles.body}>
+        {/* Carátula */}
+        <div className={styles.cover}>
+          <div className={styles.coverLogos}>
+            {config.client?.logo_url && (
+              <img
+                src={config.client.logo_url}
+                alt={config.client.name}
+                className={styles.clientLogo}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            )}
+          </div>
+          <h2 className={styles.coverTitle}>{config.title}</h2>
+          <p className={styles.coverClient}>{config.client?.name}</p>
+          <p className={styles.coverPeriod}>
+            {formatDateEs(since)} — {formatDateEs(until)}
+          </p>
+        </div>
+
         {loadingData && <div className={styles.loading}>Actualizando datos...</div>}
 
         {!loadingData && data && config.sections.map((section, i) => (
