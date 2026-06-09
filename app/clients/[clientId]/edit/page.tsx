@@ -477,11 +477,21 @@ function EditClientContent() {
               <>
                 <p className={styles.accountsHint}>
                   Subí un CSV con ventas reales para que Jair pueda calcular el ROAS verdadero independiente de Meta y Google.
+                  Necesitás al menos una columna de <strong>fecha</strong> y una de <strong>monto</strong>. La columna de producto es opcional.
                 </p>
-                <label className={styles.uploadLabel}>
-                  Subir CSV de ventas
-                  <input type="file" accept=".csv,.txt" onChange={handleFileSelect} style={{ display: 'none' }} />
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <label className={styles.uploadLabel}>
+                    Subir CSV de ventas
+                    <input type="file" accept=".csv,.txt" onChange={handleFileSelect} style={{ display: 'none' }} />
+                  </label>
+                  <a
+                    href="/ejemplo-ventas.csv"
+                    download="ejemplo-ventas.csv"
+                    className={styles.reconnectButton}
+                  >
+                    Descargar CSV de ejemplo
+                  </a>
+                </div>
               </>
             )}
 
