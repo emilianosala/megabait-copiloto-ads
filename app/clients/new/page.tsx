@@ -32,7 +32,8 @@ export default function NewClientPage() {
       body: JSON.stringify(form),
     });
     if (res.ok) {
-      router.push('/dashboard');
+      const data = await res.json();
+      router.push(`/clients/${data.id}/edit?new=1`);
     } else {
       alert('Error al guardar el cliente');
       setLoading(false);

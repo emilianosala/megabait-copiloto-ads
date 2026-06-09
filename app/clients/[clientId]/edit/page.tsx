@@ -229,6 +229,8 @@ function EditClientContent() {
     }
   };
 
+  const isNew = searchParams.get('new') === '1';
+
   return (
     <div className={styles.container}>
       <header className={styles.header}>
@@ -238,8 +240,14 @@ function EditClientContent() {
         >
           ←
         </button>
-        <h1 className={styles.headerTitle}>Editar Cliente</h1>
+        <h1 className={styles.headerTitle}>{isNew ? 'Nuevo Cliente' : 'Editar Cliente'}</h1>
       </header>
+
+      {isNew && (
+        <div className={styles.newClientBanner}>
+          ¡Cliente creado! Conectá sus cuentas de Meta Ads y Google Ads para que Jair pueda consultar datos en tiempo real.
+        </div>
+      )}
       <main className={styles.main}>
         <div className={styles.form}>
           <div className={styles.field}>

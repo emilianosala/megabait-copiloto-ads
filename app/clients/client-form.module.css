@@ -32,6 +32,15 @@
   color: var(--text-primary);
 }
 
+.newClientBanner {
+  background: var(--accent-dim);
+  border-bottom: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 13px;
+  padding: 12px 24px;
+  text-align: center;
+}
+
 .main {
   max-width: 600px;
   margin: 0 auto;

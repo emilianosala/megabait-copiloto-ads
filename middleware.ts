@@ -29,13 +29,14 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Si no está autenticado y no está en /login, redirigir a /login
-  if (!user && !request.nextUrl.pathname.startsWith('/login')) {
+  const path = request.nextUrl.pathname;
+  const isPublic = path.startsWith('/login') || path.startsWith('/reset-password');
+
+  if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Si está autenticado y va a /login, redirigir al dashboard
-  if (user && request.nextUrl.pathname.startsWith('/login')) {
+  if (user && path.startsWith('/login')) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
