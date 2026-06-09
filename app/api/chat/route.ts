@@ -807,16 +807,26 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
     ...(hasSalesData ? [SALES_TOOL] : []),
     CREATE_REPORT_TOOL,
   ];
+
+  const REPORT_KEYWORDS = ['reporte', 'informe', 'dashboard', 'armame', 'generame', 'crear reporte', 'generar reporte'];
+  const isReportRequest = REPORT_KEYWORDS.some(k => message.toLowerCase().includes(k));
   let assistantMessage = '';
   let continueLoop = true;
+  let isFirstCall = true;
 
   while (continueLoop) {
+    // En el primer turno, si es un pedido de reporte, forzar la tool create_report
+    const toolChoice = isFirstCall && isReportRequest
+      ? { type: 'tool' as const, name: 'create_report' }
+      : { type: 'auto' as const };
+    isFirstCall = false;
+
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       system: systemMessage,
       messages,
-      ...(tools.length > 0 && { tools, tool_choice: { type: 'auto' } }),
+      ...(tools.length > 0 && { tools, tool_choice: toolChoice }),
     });
 
     if (response.stop_reason === 'tool_use') {
