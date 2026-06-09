@@ -155,6 +155,15 @@ export default function ChatPage() {
           <p className={styles.clientName}>{client.name}</p>
           <p className={styles.clientIndustry}>{client.industry}</p>
         </div>
+        {messages.length > 0 && (
+          <button
+            className={styles.newChatButton}
+            onClick={() => setMessages([])}
+            title="Empezar conversación nueva (el historial anterior se conserva)"
+          >
+            + Nueva
+          </button>
+        )}
         <div className={styles.dot} />
       </header>
 

@@ -32,6 +32,23 @@
   flex: 1;
 }
 
+.newChatButton {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.newChatButton:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
 .clientName {
   font-size: 15px;
   font-weight: 600;
