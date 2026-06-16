@@ -2,109 +2,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import { anthropic } from '@/lib/anthropic';
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
-import { createGoogleAdsClient } from '@/lib/google-ads';
+import { getGoogleCampaigns, getGoogleCampaignDetail } from '@/lib/google-ads';
+import { getGA4Metrics, GA4_METRICS, GA4_DIMENSIONS } from '@/lib/google-analytics';
 import { getAccountInsights, getCampaigns } from '@/lib/meta-ads';
 import { logApiCall } from '@/lib/api-audit';
 import { NextResponse } from 'next/server';
-
-interface MetricRow {
-  metrics: {
-    impressions: number;
-    clicks: number;
-    cost_micros: number;
-    conversions: number;
-  };
-}
-
-async function fetchGoogleAdsMetrics(
-  accountId: string,
-  refreshToken: string,
-  userId: string,
-  clientId: string,
-  organizationId: string,
-): Promise<string | null> {
-  const endpoint = `customers/${accountId}/googleAds:searchStream`;
-  try {
-    const googleAds = createGoogleAdsClient();
-    const customer = googleAds.Customer({
-      customer_id: accountId,
-      refresh_token: refreshToken,
-    });
-
-    // Sin seleccionar segments.date, Google Ads agrega las métricas por campaña
-    // para todo el período indicado en el WHERE → una fila por campaña.
-    const rows = await customer.query<MetricRow[]>(`
-      SELECT
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions
-      FROM campaign
-      WHERE segments.date DURING LAST_30_DAYS
-        AND campaign.status != 'REMOVED'
-    `);
-
-    await logApiCall({
-      userId,
-      clientId,
-      organizationId,
-      platform: 'google',
-      endpoint,
-      requestParams: { query: 'campaign_metrics_last_30d', accountId },
-      responseOk: true,
-      triggeredBy: 'system_prompt',
-    });
-
-    if (!rows.length) return null;
-
-    const totals = rows.reduce(
-      (
-        acc: {
-          impressions: number;
-          clicks: number;
-          cost: number;
-          conversions: number;
-        },
-        row: MetricRow,
-      ) => ({
-        impressions: acc.impressions + (row.metrics.impressions ?? 0),
-        clicks: acc.clicks + (row.metrics.clicks ?? 0),
-        cost: acc.cost + (row.metrics.cost_micros ?? 0) / 1_000_000,
-        conversions: acc.conversions + (row.metrics.conversions ?? 0),
-      }),
-      { impressions: 0, clicks: 0, cost: 0, conversions: 0 },
-    );
-
-    const ctr =
-      totals.impressions > 0
-        ? ((totals.clicks / totals.impressions) * 100).toFixed(2)
-        : '0.00';
-    const cpc =
-      totals.clicks > 0 ? (totals.cost / totals.clicks).toFixed(2) : '0.00';
-
-    return `MÉTRICAS REALES DE GOOGLE ADS (últimos 30 días):
-- Impresiones: ${totals.impressions.toLocaleString('es-AR')}
-- Clics: ${totals.clicks.toLocaleString('es-AR')}
-- Costo total: $${totals.cost.toFixed(2)}
-- Conversiones: ${totals.conversions.toFixed(1)}
-- CTR: ${ctr}%
-- CPC promedio: $${cpc}`;
-  } catch (err) {
-    console.error('[Google Ads] Error al obtener métricas:', err);
-    await logApiCall({
-      userId,
-      clientId,
-      organizationId,
-      platform: 'google',
-      endpoint,
-      requestParams: { query: 'campaign_metrics_last_30d', accountId },
-      responseOk: false,
-      errorMessage: err instanceof Error ? err.message : String(err),
-      triggeredBy: 'system_prompt',
-    });
-    return null;
-  }
-}
 
 // ── Meta Ads Tool Use ─────────────────────────────────────────────────────────
 
@@ -295,6 +197,223 @@ async function executeMetaTool(
     return JSON.stringify({
       error: err.message || 'Error desconocido al consultar Meta Ads',
     });
+  }
+}
+
+// ── Google Ads Tools ──────────────────────────────────────────────────────────
+
+const GOOGLE_DATE_PRESETS = [
+  'last_7d', 'last_14d', 'last_30d', 'last_90d',
+  'this_month', 'last_month', 'this_quarter',
+] as const;
+
+const GOOGLE_ADS_TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'get_google_campaigns',
+    description: `Lista todas las campañas de Google Ads del cliente, incluyendo las pausadas.
+Usá esta tool para:
+- Revisar qué campañas existen y si están bien configuradas (estrategia de puja, presupuesto, tipo)
+- Detectar campañas pausadas que podrían activarse
+- Comparar rendimiento entre campañas para un período dado
+- Diagnóstico inicial antes de profundizar con get_google_campaign_detail
+
+Retorna por campaña: nombre, estado (ENABLED/PAUSED), tipo de canal, estrategia de puja, presupuesto diario y métricas del período.
+Las campañas pausadas van a tener métricas en 0 para el período si estuvieron inactivas.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        date_preset: {
+          type: 'string',
+          enum: GOOGLE_DATE_PRESETS,
+          description: 'Período para las métricas. Default: last_30d.',
+        },
+        since: { type: 'string', description: 'Fecha inicio YYYY-MM-DD. Usar junto con until.' },
+        until: { type: 'string', description: 'Fecha fin YYYY-MM-DD. Usar junto con since.' },
+      },
+    },
+  },
+  {
+    name: 'get_google_campaign_detail',
+    description: `Obtiene el detalle completo de una campaña específica de Google Ads.
+Usá esta tool después de get_google_campaigns cuando necesitás profundizar en una campaña:
+- Ver todos los ad groups y sus estados
+- Revisar las keywords (texto, tipo de coincidencia, quality score)
+- Ver un resumen de los anuncios activos y sus headlines
+- Diagnosticar si la estructura de la campaña es correcta
+
+Requiere el campaign_id obtenido de get_google_campaigns.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        campaign_id: {
+          type: 'string',
+          description: 'ID numérico de la campaña (obtenido de get_google_campaigns).',
+        },
+        date_preset: {
+          type: 'string',
+          enum: GOOGLE_DATE_PRESETS,
+          description: 'Período para las métricas de ad groups. Default: last_30d.',
+        },
+        since: { type: 'string', description: 'Fecha inicio YYYY-MM-DD.' },
+        until: { type: 'string', description: 'Fecha fin YYYY-MM-DD.' },
+      },
+      required: ['campaign_id'],
+    },
+  },
+];
+
+async function executeGoogleAdsTool(
+  toolName: string,
+  toolInput: Record<string, string>,
+  accountId: string,
+  refreshToken: string,
+  userId: string,
+  clientId: string,
+  organizationId: string,
+): Promise<string> {
+  try {
+    const { date_preset, since, until, campaign_id } = toolInput;
+
+    if (toolName === 'get_google_campaigns') {
+      const campaigns = await getGoogleCampaigns(accountId, refreshToken, date_preset, since, until);
+
+      await logApiCall({
+        userId, clientId, organizationId,
+        platform: 'google', toolName,
+        endpoint: `customers/${accountId}/googleAds:searchStream`,
+        requestParams: { date_preset: date_preset ?? 'last_30d', since, until },
+        responseOk: true,
+      });
+
+      if (!campaigns.length) return JSON.stringify({ mensaje: 'No se encontraron campañas en esta cuenta.' });
+      return JSON.stringify(campaigns);
+    }
+
+    if (toolName === 'get_google_campaign_detail') {
+      if (!campaign_id) return JSON.stringify({ error: 'campaign_id es requerido.' });
+
+      const detail = await getGoogleCampaignDetail(accountId, refreshToken, campaign_id, date_preset, since, until);
+
+      await logApiCall({
+        userId, clientId, organizationId,
+        platform: 'google', toolName,
+        endpoint: `customers/${accountId}/googleAds:searchStream`,
+        requestParams: { campaign_id, date_preset: date_preset ?? 'last_30d' },
+        responseOk: true,
+      });
+
+      return JSON.stringify(detail);
+    }
+
+    return JSON.stringify({ error: 'Tool no reconocida.' });
+  } catch (err: any) {
+    console.error(`[Google Ads Tool] Error en ${toolName}:`, err);
+    await logApiCall({
+      userId, clientId, organizationId,
+      platform: 'google', toolName,
+      endpoint: `customers/${accountId}/googleAds:searchStream`,
+      requestParams: { ...toolInput },
+      responseOk: false,
+      errorMessage: err.message || 'Error desconocido',
+    });
+    return JSON.stringify({ error: err.message || 'Error al consultar Google Ads' });
+  }
+}
+
+// ── Google Analytics Tool ─────────────────────────────────────────────────────
+
+const GA4_TOOL: Anthropic.Tool = {
+  name: 'get_ga4_metrics',
+  description: `Obtiene métricas del sitio web del cliente desde Google Analytics 4 (GA4).
+Usá esta tool para cruzar datos de tráfico web con el gasto en ads:
+- Verificar si las campañas están generando tráfico real al sitio
+- Analizar el comportamiento de usuarios por canal (organic, paid, direct)
+- Ver tasas de conversión del sitio y compararlas con lo que reportan las plataformas de ads
+- Detectar problemas de landing page (bounce rate alto, sesiones cortas)
+
+Métricas disponibles: sessions, activeUsers, newUsers, bounceRate, engagementRate, conversions, eventCount, screenPageViews, averageSessionDuration.
+Dimensiones disponibles: date, sessionDefaultChannelGroup, country, deviceCategory, sessionSource, sessionMedium, sessionCampaignName, pagePath.
+
+Para análisis de canal: dimensions=['sessionDefaultChannelGroup'], metrics=['sessions','conversions'].
+Para tendencia diaria: dimensions=['date'], metrics=['sessions','activeUsers'].
+Para dispositivos: dimensions=['deviceCategory'], metrics=['sessions','bounceRate'].`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      metrics: {
+        type: 'array',
+        items: { type: 'string', enum: [...GA4_METRICS] },
+        description: 'Métricas a obtener. Default: sessions, activeUsers, conversions.',
+      },
+      dimensions: {
+        type: 'array',
+        items: { type: 'string', enum: [...GA4_DIMENSIONS] },
+        description: 'Dimensiones de desglose (opcional). Sin dimensiones, retorna totales del período.',
+      },
+      date_preset: {
+        type: 'string',
+        enum: ['last_7d', 'last_14d', 'last_30d', 'last_90d', 'this_month', 'last_month', 'this_quarter'],
+        description: 'Período. Default: last_30d.',
+      },
+      since: { type: 'string', description: 'Fecha inicio YYYY-MM-DD.' },
+      until: { type: 'string', description: 'Fecha fin YYYY-MM-DD.' },
+    },
+  },
+};
+
+async function executeGA4Tool(
+  toolInput: Record<string, any>,
+  propertyId: string,
+  refreshToken: string,
+  userId: string,
+  clientId: string,
+  organizationId: string,
+): Promise<string> {
+  try {
+    const metrics: string[] = toolInput.metrics?.length
+      ? toolInput.metrics
+      : ['sessions', 'activeUsers', 'conversions'];
+
+    const dimensions: string[] = toolInput.dimensions ?? [];
+
+    const report = await getGA4Metrics(
+      propertyId,
+      refreshToken,
+      metrics,
+      dimensions,
+      toolInput.date_preset,
+      toolInput.since,
+      toolInput.until,
+    );
+
+    await logApiCall({
+      userId, clientId, organizationId,
+      platform: 'google', toolName: 'get_ga4_metrics',
+      endpoint: `properties/${propertyId}:runReport`,
+      requestParams: { metrics, dimensions, date_preset: toolInput.date_preset ?? 'last_30d' },
+      responseOk: true,
+    });
+
+    return JSON.stringify(report);
+  } catch (err: any) {
+    console.error('[GA4 Tool] Error:', err);
+    await logApiCall({
+      userId, clientId, organizationId,
+      platform: 'google', toolName: 'get_ga4_metrics',
+      endpoint: `properties/${propertyId}:runReport`,
+      requestParams: { ...toolInput },
+      responseOk: false,
+      errorMessage: err.message || 'Error desconocido',
+    });
+
+    // Error de scope faltante → mensaje específico para el analista
+    if (err.message?.includes('PERMISSION_DENIED') || err.message?.includes('403')) {
+      return JSON.stringify({
+        error: 'Sin permisos para acceder a Google Analytics. El cliente necesita reconectar su cuenta de Google desde la página de edición para incluir el scope de Analytics.',
+      });
+    }
+
+    return JSON.stringify({ error: err.message || 'Error al consultar Google Analytics' });
   }
 }
 
@@ -499,6 +618,163 @@ Secciones posibles:
   },
 };
 
+// ── Alert Tools ───────────────────────────────────────────────────────────────
+
+const ALERT_CONDITION_TYPES = [
+  'meta_cpa_above',
+  'meta_spend_above',
+  'meta_ctr_below',
+  'google_cpa_above',
+  'google_spend_above',
+  'google_ctr_below',
+  'sales_below',
+] as const;
+
+const ALERT_DATE_PRESETS = ['last_7d', 'last_14d', 'last_30d', 'this_month'] as const;
+
+const ALERT_TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'create_alert',
+    description: `Crea una alerta personalizada para este cliente. La alerta se evalúa diariamente y notifica al analista cuando la condición se cumple.
+Usá esta tool cuando el analista pida configurar una alerta, ya sea directamente ("creame una alerta") o implícitamente ("avisame si el CPA sube de $50").
+
+Condiciones disponibles:
+- meta_cpa_above: CPA de Meta supera X USD (spend / conversiones)
+- meta_spend_above: gasto en Meta supera X USD en el período
+- meta_ctr_below: CTR de Meta cae debajo de X%
+- google_cpa_above: CPA de Google supera X USD
+- google_spend_above: gasto en Google supera X USD
+- google_ctr_below: CTR promedio de Google cae debajo de X%
+- sales_below: ventas reales caen debajo de X (en la moneda cargada)
+
+Por defecto el analista recibe notificación por mail y en la app. Podés desactivar alguno con notify_email o notify_inapp.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Nombre descriptivo de la alerta. Ej: "CPA Meta supera $50"' },
+        condition_type: {
+          type: 'string',
+          enum: [...ALERT_CONDITION_TYPES],
+          description: 'Tipo de condición',
+        },
+        condition_value: { type: 'number', description: 'Valor umbral de la condición' },
+        date_preset: {
+          type: 'string',
+          enum: [...ALERT_DATE_PRESETS],
+          description: 'Período de evaluación. Default: last_7d.',
+        },
+        notify_email: { type: 'boolean', description: 'Enviar notificación por mail. Default: true.' },
+        notify_inapp: { type: 'boolean', description: 'Notificación en la app. Default: true.' },
+      },
+      required: ['name', 'condition_type', 'condition_value'],
+    },
+  },
+  {
+    name: 'update_alert',
+    description: `Modifica o desactiva una alerta existente del cliente.
+Usá esta tool cuando el analista quiera:
+- Desactivar una alerta: is_active = false
+- Cambiar el umbral: condition_value = nuevo valor
+- Desactivar notificaciones por mail: notify_email = false
+- Desactivar notificaciones in-app: notify_inapp = false
+
+Para encontrar el alert_id, primero llamá list_alerts.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        alert_id: { type: 'string', description: 'ID de la alerta a modificar (obtenido de list_alerts)' },
+        is_active: { type: 'boolean', description: 'true para activar, false para desactivar' },
+        condition_value: { type: 'number', description: 'Nuevo valor umbral' },
+        notify_email: { type: 'boolean', description: 'Activar/desactivar notificaciones por mail' },
+        notify_inapp: { type: 'boolean', description: 'Activar/desactivar notificaciones in-app' },
+        date_preset: { type: 'string', enum: [...ALERT_DATE_PRESETS], description: 'Cambiar período de evaluación' },
+      },
+      required: ['alert_id'],
+    },
+  },
+  {
+    name: 'list_alerts',
+    description: `Lista las alertas configuradas para este cliente.
+Usá esta tool cuando el analista pregunte qué alertas tiene activas, o antes de usar update_alert para obtener el alert_id.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+    },
+  },
+];
+
+async function executeAlertTool(
+  toolName: string,
+  toolInput: Record<string, any>,
+  clientId: string,
+  organizationId: string,
+  userId: string,
+): Promise<string> {
+  const admin = createSupabaseAdmin();
+
+  if (toolName === 'create_alert') {
+    const { data, error } = await admin.from('alerts').insert({
+      client_id: clientId,
+      organization_id: organizationId,
+      created_by: userId,
+      name: toolInput.name,
+      condition_type: toolInput.condition_type,
+      condition_value: toolInput.condition_value,
+      date_preset: toolInput.date_preset ?? 'last_7d',
+      notify_email: toolInput.notify_email ?? true,
+      notify_inapp: toolInput.notify_inapp ?? true,
+    }).select('id, name, condition_type, condition_value, date_preset, notify_email, notify_inapp').single();
+
+    if (error) return JSON.stringify({ error: error.message });
+
+    return JSON.stringify({
+      success: true,
+      alert: data,
+      message: `Alerta creada: "${data.name}". Se evaluará diariamente (período: ${data.date_preset}). Notificaciones: ${data.notify_email ? 'mail ✓' : 'mail ✗'} ${data.notify_inapp ? 'in-app ✓' : 'in-app ✗'}.`,
+    });
+  }
+
+  if (toolName === 'update_alert') {
+    const { alert_id, ...patch } = toolInput;
+    const allowed = ['is_active', 'notify_email', 'notify_inapp', 'condition_value', 'date_preset'];
+    const update: Record<string, any> = {};
+    for (const key of allowed) {
+      if (key in patch) update[key] = patch[key];
+    }
+
+    const { data, error } = await admin
+      .from('alerts')
+      .update(update)
+      .eq('id', alert_id)
+      .eq('client_id', clientId)
+      .select('name, is_active, notify_email, notify_inapp, condition_value')
+      .single();
+
+    if (error) return JSON.stringify({ error: error.message });
+
+    return JSON.stringify({
+      success: true,
+      alert: data,
+      message: `Alerta "${data.name}" actualizada correctamente.`,
+    });
+  }
+
+  if (toolName === 'list_alerts') {
+    const { data, error } = await admin
+      .from('alerts')
+      .select('id, name, condition_type, condition_value, date_preset, notify_email, notify_inapp, is_active, last_triggered_at')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+
+    if (error) return JSON.stringify({ error: error.message });
+    if (!data || data.length === 0) return JSON.stringify({ message: 'Este cliente no tiene alertas configuradas todavía.' });
+
+    return JSON.stringify(data);
+  }
+
+  return JSON.stringify({ error: 'Tool no reconocida.' });
+}
+
 function resolveReportDates(input: Record<string, any>): { since: string; until: string } {
   if (input.since && input.until) return { since: input.since, until: input.until };
 
@@ -608,30 +884,21 @@ export async function POST(request: Request) {
     );
   }
 
-  // Google Ads: sigue inyectando en el system prompt (Developer Token pendiente)
-  let metricsBlock = '';
+  // Google Ads: obtener refresh_token para las tools
+  let googleRefreshToken: string | null = null;
   if (client.google_ads_account_id) {
-    const { data: connection } = await adminForClient
+    const { data: googleConnection } = await adminForClient
       .from('google_connections')
       .select('refresh_token')
       .eq('client_id', client.id)
       .maybeSingle();
-
-    if (connection) {
-      const metrics = await fetchGoogleAdsMetrics(
-        client.google_ads_account_id,
-        connection.refresh_token,
-        user.id,
-        client.id,
-        client.organization_id,
-      );
-      if (metrics) {
-        metricsBlock = `\n\n${metrics}\n\nUsá estos datos reales como base para tu análisis.`;
-      }
-    }
+    if (googleConnection) googleRefreshToken = googleConnection.refresh_token;
   }
 
-  // Meta Ads: obtener token para pasarlo a las tools (no pre-calculamos métricas)
+  const hasGoogleAds = !!(client.google_ads_account_id && googleRefreshToken);
+  const hasGA4 = !!(client.google_analytics_property_id && googleRefreshToken);
+
+  // Meta Ads: obtener token para las tools
   let metaAccessToken: string | null = null;
   if (client.meta_ads_account_id) {
     const { data: metaConnection } = await adminForClient
@@ -639,10 +906,7 @@ export async function POST(request: Request) {
       .select('access_token')
       .eq('client_id', client.id)
       .maybeSingle();
-
-    if (metaConnection) {
-      metaAccessToken = metaConnection.access_token;
-    }
+    if (metaConnection) metaAccessToken = metaConnection.access_token;
   }
 
   const hasMetaAds = !!(client.meta_ads_account_id && metaAccessToken);
@@ -654,6 +918,14 @@ export async function POST(request: Request) {
     .select('id', { count: 'exact', head: true })
     .eq('client_id', clientId);
   const hasSalesData = (salesCount ?? 0) > 0;
+
+  // Alertas: cargar alertas activas del cliente
+  const { data: activeAlerts } = await adminForClient
+    .from('alerts')
+    .select('id, name, condition_type, condition_value, date_preset, last_triggered_at')
+    .eq('client_id', clientId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
 
   const systemMessage = `# IDENTIDAD
 
@@ -669,7 +941,7 @@ Tu tono es profesional, directo y accesible. Hablás en español rioplatense. Te
 - Objetivos: ${client.objectives}
 - Presupuesto: ${client.budget}
 - KPIs prioritarios: ${client.kpis}
-- Restricciones: ${client.restrictions}${metricsBlock}
+- Restricciones: ${client.restrictions}
 
 # PRINCIPIOS ANALÍTICOS NO NEGOCIABLES
 
@@ -795,21 +1067,34 @@ Cruzalos y dá visión unificada. Ejemplos:
 Ejemplo: "Veo que el ángulo de 'descuento' tiene 2x más CTR que el de 'calidad' en los últimos 14 días. Hipótesis: este segmento responde mejor a urgencia que a prestigio. Propongo lanzar 2 creatividades nuevas con foco en oferta limitada. Evaluaríamos CTR y CPA en 5 días."
 
 # HERRAMIENTAS DISPONIBLES
+
+**Regla general para todas las tools:**
+- Usá las tools cuando el analista pida datos o análisis específicos que requieran números reales.
+- No las uses para preguntas estratégicas, conceptuales o cuando el analista ya te pasó los datos.
+- Para comparar dos períodos, llamá la tool dos veces con distintos date_preset.
+
+## Meta Ads
 ${hasMetaAds ? `
-Este cliente tiene **Meta Ads conectado** via integración OAuth. Disponés de tools para consultar métricas y campañas en tiempo real (get_meta_account_insights, get_meta_campaigns).
+Conectado. Tools disponibles: **get_meta_account_insights** (métricas agregadas de la cuenta) y **get_meta_campaigns** (lista de campañas con métricas individuales).` : `
+**No conectado.** Si la conversación requiere datos de Meta, recomendá conectar la cuenta desde el dashboard. No inventes métricas.`}
 
-**Cuándo usar las tools:**
-- Cuando el analista te pida datos específicos de Meta (métricas, campañas, comparaciones entre períodos)
-- Cuando necesités datos reales para fundamentar un análisis
-- Cuando quieras verificar una hipótesis con datos frescos
+## Google Ads
+${hasGoogleAds ? `
+Conectado. Tools disponibles:
+- **get_google_campaigns**: lista todas las campañas incluyendo las pausadas, con configuración (estrategia de puja, presupuesto diario, tipo de canal) y métricas del período. Ideal para revisión inicial y diagnóstico.
+- **get_google_campaign_detail**: detalle de una campaña específica — ad groups, keywords (con quality score), y resumen de anuncios. Requiere el campaign_id de get_google_campaigns.
 
-**Cuándo NO usar las tools:**
-- Cuando la pregunta es estratégica, no de datos (ej: "¿cómo encaramos un Black Friday?")
-- Cuando el analista ya te pasó los datos en la conversación
-- Cuando solo se está discutiendo el plan, sin necesidad de medirlo aún
+Flujo sugerido: get_google_campaigns → identificar campaña de interés → get_google_campaign_detail para profundizar.` : `
+**No conectado** o Developer Token pendiente. Si el analista quiere analizar Google Ads, necesita reconectar la cuenta desde el dashboard una vez que el Developer Token esté configurado.`}
 
-Si vas a comparar dos períodos, llamá la tool dos veces con distintos date_preset. Si el cliente pide un rango específico de fechas, usá since/until.` : `
-Este cliente **todavía no tiene Meta Ads conectado** en la plataforma. Si la conversación requiere datos de Meta, recomendá al analista que conecte la cuenta desde el dashboard. No inventes métricas.`}
+## Google Analytics (GA4)
+${hasGA4 ? `
+Conectado. Tool disponible: **get_ga4_metrics** para datos del sitio web — sesiones, usuarios, tasas de conversión, canales de tráfico.
+
+Usá esta tool para cruzar tráfico web con gasto en ads: ¿las campañas llevan tráfico real? ¿Qué canal convierte mejor? ¿La landing page tiene bounce rate alto?
+
+Si get_ga4_metrics retorna error de permisos, el cliente necesita reconectar Google para incluir el scope de Analytics.` : `
+**No configurado.** ${googleRefreshToken ? 'El cliente tiene Google conectado pero sin Property ID de GA4. Podés sugerirle que lo configure en la página de edición.' : 'El cliente no tiene Google conectado todavía.'}`}
 
 # CIERRE
 
@@ -829,6 +1114,22 @@ Pasos obligatorios:
 Palabras clave que activan \`create_report\`: "reporte", "informe", "dashboard", "armame un reporte", "generame un informe", "quiero ver", "mostrá los datos", "compartir con el cliente".
 
 Colores disponibles para secciones (campo \`color\` opcional): verde neon #39ff14, dorado #FFD700, azul #00bfff, rojo coral #ff6b6b, violeta #b39ddb, celeste #80deea, naranja #ffcc80. Si el analista no especifica colores, usá verde para Meta y dorado para ventas.
+
+# ALERTAS PERSONALIZADAS
+
+Podés crear, modificar y listar alertas para este cliente usando las tools create_alert, update_alert y list_alerts.
+
+${activeAlerts && activeAlerts.length > 0
+  ? `Este cliente tiene **${activeAlerts.length} alerta(s) activa(s)**:
+${activeAlerts.map(a => `- "${a.name}" (${a.condition_type} ${a.condition_value}, período: ${a.date_preset})${a.last_triggered_at ? ` — último disparo: ${new Date(a.last_triggered_at).toLocaleDateString('es-AR')}` : ''}`).join('\n')}
+
+Si el analista menciona que quiere modificar alguna de estas alertas, usá update_alert con el id correspondiente.`
+  : `Este cliente **no tiene alertas configuradas** todavía.`}
+
+Ejemplos de alertas que podés sugerir proactivamente cuando detectes un problema:
+- "¿Querés que te avise si el CPA de Meta vuelve a superar este valor?"
+- "Puedo configurar una alerta para que te notifique si el gasto semanal de Google supera $X"
+- "¿Te armo una alerta para cuando las ventas caigan debajo del mínimo histórico?"
 
 # DATOS DE VENTAS REALES
 ${hasSalesData ? `
@@ -850,8 +1151,11 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
 
   const tools: Anthropic.Tool[] = [
     ...(hasMetaAds ? META_ADS_TOOLS : []),
+    ...(hasGoogleAds ? GOOGLE_ADS_TOOLS : []),
+    ...(hasGA4 ? [GA4_TOOL] : []),
     ...(hasSalesData ? [SALES_TOOL] : []),
     CREATE_REPORT_TOOL,
+    ...ALERT_TOOLS,
   ];
 
   const REPORT_KEYWORDS = ['reporte', 'informe', 'dashboard', 'armame', 'generame', 'crear reporte', 'generar reporte'];
@@ -895,6 +1199,33 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
               client.id,
               user.id,
               origin,
+            );
+          } else if (block.name === 'get_google_campaigns' || block.name === 'get_google_campaign_detail') {
+            result = await executeGoogleAdsTool(
+              block.name,
+              block.input as Record<string, string>,
+              client.google_ads_account_id,
+              googleRefreshToken!,
+              user.id,
+              client.id,
+              client.organization_id,
+            );
+          } else if (block.name === 'get_ga4_metrics') {
+            result = await executeGA4Tool(
+              block.input as Record<string, any>,
+              client.google_analytics_property_id,
+              googleRefreshToken!,
+              user.id,
+              client.id,
+              client.organization_id,
+            );
+          } else if (block.name === 'create_alert' || block.name === 'update_alert' || block.name === 'list_alerts') {
+            result = await executeAlertTool(
+              block.name,
+              block.input as Record<string, any>,
+              client.id,
+              client.organization_id,
+              user.id,
             );
           } else {
             result = await executeMetaTool(

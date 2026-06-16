@@ -86,14 +86,24 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'Alertas personalizadas',
+    icon: '🔔',
+    description: 'Configurá alertas automáticas pidiéndoselas a Jair. Se evalúan diariamente y te notifican por mail y en la app cuando se disparan.',
+    examples: [
+      'Creame una alerta si el CPA de Meta supera $50 USD esta semana',
+      'Avisame si el gasto en Google supera $1000 en los últimos 7 días',
+      'Alerta si el CTR de Meta cae debajo del 1%',
+      'Notificame si las ventas semanales caen debajo de $5000',
+      'Desactivame las notificaciones por mail de esa alerta',
+    ],
+  },
+  {
     title: 'Limitaciones actuales',
     icon: '⚠️',
     description: 'Cosas que Jair todavía no puede hacer (pero están en el roadmap):',
     items: [
       { label: 'Ejecutar cambios en cuentas', desc: 'Jair propone, el analista aprueba y ejecuta en la plataforma' },
-      { label: 'Google Analytics', desc: 'Próximamente (P5)' },
-      { label: 'Google Ads tool use', desc: 'Pendiente de Developer Token aprobado' },
-      { label: 'Alertas automáticas', desc: 'Próximamente (P8)' },
+      { label: 'Notificaciones push en el celular', desc: 'Próximamente vía PWA' },
     ],
   },
 ];

@@ -18,6 +18,18 @@ interface MetaAccount {
   account_status: number;
 }
 
+interface Alert {
+  id: string;
+  name: string;
+  condition_type: string;
+  condition_value: number;
+  date_preset: string;
+  notify_email: boolean;
+  notify_inapp: boolean;
+  is_active: boolean;
+  last_triggered_at: string | null;
+}
+
 interface SalesSummary {
   rowCount: number;
   dateRange: { min: string; max: string };
@@ -50,6 +62,7 @@ function EditClientContent() {
   const [metaAccounts, setMetaAccounts] = useState<MetaAccount[] | null>(null);
   const [metaAccountsError, setMetaAccountsError] = useState<string | null>(null);
 
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [salesSummary, setSalesSummary] = useState<SalesSummary | null>(null);
   const [salesLoading, setSalesLoading] = useState(true);
   const [uploadStep, setUploadStep] = useState<'idle' | 'mapping' | 'saving'>('idle');
@@ -78,6 +91,7 @@ function EditClientContent() {
     google_ads_account_id: '',
     meta_ads_account_id: '',
     logo_url: '',
+    google_analytics_property_id: '',
   });
 
   function loadGoogleAccounts() {
@@ -98,6 +112,28 @@ function EditClientContent() {
         else setMetaAccounts(data);
       })
       .catch(() => setMetaAccountsError('Error al cargar cuentas de Meta'));
+  }
+
+  function loadAlerts() {
+    fetch(`/api/alerts?clientId=${clientId}`)
+      .then((res) => res.json())
+      .then((data) => setAlerts(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }
+
+  async function toggleAlert(alertId: string, isActive: boolean) {
+    await fetch(`/api/alerts/${alertId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !isActive }),
+    });
+    setAlerts((prev) => prev.map((a) => a.id === alertId ? { ...a, is_active: !isActive } : a));
+  }
+
+  async function deleteAlert(alertId: string, alertName: string) {
+    if (!confirm(`¿Eliminar la alerta "${alertName}"?`)) return;
+    await fetch(`/api/alerts/${alertId}`, { method: 'DELETE' });
+    setAlerts((prev) => prev.filter((a) => a.id !== alertId));
   }
 
   function loadSalesSummary() {
@@ -164,6 +200,7 @@ function EditClientContent() {
           google_ads_account_id: data.google_ads_account_id ?? '',
           meta_ads_account_id: data.meta_ads_account_id ?? '',
           logo_url: data.logo_url ?? '',
+          google_analytics_property_id: data.google_analytics_property_id ?? '',
         }),
       );
 
@@ -182,6 +219,7 @@ function EditClientContent() {
       });
 
     loadSalesSummary();
+    loadAlerts();
   }, [clientId]);
 
   // Manejar el callback de OAuth: el backend redirige de vuelta a esta página
@@ -419,6 +457,24 @@ function EditClientContent() {
                 Reconectar Google Ads
               </a>
             )}
+
+            <div className={styles.field} style={{ marginTop: 16 }}>
+              <label className={styles.label}>
+                Google Analytics Property ID
+              </label>
+              <input
+                className={styles.input}
+                name="google_analytics_property_id"
+                placeholder="Ej: 123456789"
+                value={form.google_analytics_property_id}
+                onChange={handleChange}
+              />
+              <p className={styles.accountsHint} style={{ marginTop: 4 }}>
+                Se encuentra en GA4 → Administración → Propiedad → Detalles de la propiedad. Solo el número, sin el prefijo "properties/".
+                {googleConnected && !form.google_analytics_property_id && ' Una vez ingresado, Jair podrá cruzar datos del sitio con las campañas.'}
+                {googleConnected && form.google_analytics_property_id && ' El cliente necesita reconectar Google si la conexión es anterior a hoy (para incluir el scope de Analytics).'}
+              </p>
+            </div>
           </div>
 
           {/* ── Sección Meta Ads ── */}
@@ -644,6 +700,61 @@ function EditClientContent() {
             {/* Estado: guardando */}
             {uploadStep === 'saving' && (
               <p className={styles.accountsHint}>Importando datos...</p>
+            )}
+          </div>
+
+          {/* ── Sección Alertas ── */}
+          <div className={styles.accountsSection}>
+            <p className={styles.accountsSectionTitle}>Alertas personalizadas</p>
+
+            {alerts.length === 0 ? (
+              <p className={styles.accountsHint}>
+                No hay alertas configuradas para este cliente. Pedíselas a Jair en el chat: <em>"Creame una alerta si el CPA supera $50"</em>.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {alerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      gap: 12,
+                      opacity: alert.is_active ? 1 : 0.5,
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                        {alert.name}
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        {alert.date_preset} · {alert.notify_email ? 'mail' : ''}{alert.notify_email && alert.notify_inapp ? ' · ' : ''}{alert.notify_inapp ? 'in-app' : ''}
+                        {alert.last_triggered_at && ` · disparada ${new Date(alert.last_triggered_at).toLocaleDateString('es-AR')}`}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      <button
+                        className={styles.reconnectButton}
+                        onClick={() => toggleAlert(alert.id, alert.is_active)}
+                      >
+                        {alert.is_active ? 'Desactivar' : 'Activar'}
+                      </button>
+                      <button
+                        className={styles.cancelButton}
+                        onClick={() => deleteAlert(alert.id, alert.name)}
+                        style={{ fontSize: 12, padding: '6px 10px' }}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

@@ -10,5 +10,6 @@ export function createOAuthClient(): OAuth2Client {
 
 export const GOOGLE_ADS_SCOPES = [
   'https://www.googleapis.com/auth/adwords',
+  'https://www.googleapis.com/auth/analytics.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
 ];
