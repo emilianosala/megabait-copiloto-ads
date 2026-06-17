@@ -26,8 +26,22 @@ interface Alert {
   date_preset: string;
   notify_email: boolean;
   notify_inapp: boolean;
+  notify_emails: string[];
   is_active: boolean;
   last_triggered_at: string | null;
+}
+
+function conditionLabel(type: string, value: number): string {
+  const map: Record<string, string> = {
+    meta_cpa_above:    `CPA Meta > $${value}`,
+    meta_spend_above:  `Gasto Meta > $${value}`,
+    meta_ctr_below:    `CTR Meta < ${value}%`,
+    google_cpa_above:  `CPA Google > $${value}`,
+    google_spend_above:`Gasto Google > $${value}`,
+    google_ctr_below:  `CTR Google < ${value}%`,
+    sales_below:       `Ventas < $${value}`,
+  };
+  return map[type] ?? type;
 }
 
 interface SalesSummary {
@@ -63,6 +77,15 @@ function EditClientContent() {
   const [metaAccountsError, setMetaAccountsError] = useState<string | null>(null);
 
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    condition_value: 0,
+    date_preset: 'last_7d',
+    notify_email: true,
+    notify_inapp: true,
+    notify_emails_raw: '',
+  });
   const [salesSummary, setSalesSummary] = useState<SalesSummary | null>(null);
   const [salesLoading, setSalesLoading] = useState(true);
   const [uploadStep, setUploadStep] = useState<'idle' | 'mapping' | 'saving'>('idle');
@@ -134,6 +157,45 @@ function EditClientContent() {
     if (!confirm(`¿Eliminar la alerta "${alertName}"?`)) return;
     await fetch(`/api/alerts/${alertId}`, { method: 'DELETE' });
     setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+  }
+
+  function openEdit(alert: Alert) {
+    setEditingId(alert.id);
+    setEditForm({
+      condition_value: alert.condition_value,
+      date_preset: alert.date_preset,
+      notify_email: alert.notify_email,
+      notify_inapp: alert.notify_inapp,
+      notify_emails_raw: (alert.notify_emails ?? []).join(', '),
+    });
+  }
+
+  async function saveEdit(alertId: string) {
+    setEditSaving(true);
+    const notify_emails = editForm.notify_emails_raw
+      .split(',')
+      .map((e) => e.trim())
+      .filter(Boolean);
+    await fetch(`/api/alerts/${alertId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        condition_value: editForm.condition_value,
+        date_preset: editForm.date_preset,
+        notify_email: editForm.notify_email,
+        notify_inapp: editForm.notify_inapp,
+        notify_emails,
+      }),
+    });
+    setAlerts((prev) =>
+      prev.map((a) =>
+        a.id === alertId
+          ? { ...a, condition_value: editForm.condition_value, date_preset: editForm.date_preset, notify_email: editForm.notify_email, notify_inapp: editForm.notify_inapp, notify_emails }
+          : a,
+      ),
+    );
+    setEditSaving(false);
+    setEditingId(null);
   }
 
   function loadSalesSummary() {
@@ -717,41 +779,133 @@ function EditClientContent() {
                   <div
                     key={alert.id}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 14px',
                       background: 'var(--bg-elevated)',
                       border: '1px solid var(--border)',
                       borderRadius: 'var(--radius)',
-                      gap: 12,
                       opacity: alert.is_active ? 1 : 0.5,
+                      overflow: 'hidden',
                     }}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                        {alert.name}
-                      </p>
-                      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                        {alert.date_preset} · {alert.notify_email ? 'mail' : ''}{alert.notify_email && alert.notify_inapp ? ' · ' : ''}{alert.notify_inapp ? 'in-app' : ''}
-                        {alert.last_triggered_at && ` · disparada ${new Date(alert.last_triggered_at).toLocaleDateString('es-AR')}`}
-                      </p>
+                    {/* Fila principal */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                          {alert.name}
+                        </p>
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                          {conditionLabel(alert.condition_type, alert.condition_value)}
+                          {' · '}{alert.date_preset}
+                          {(alert.notify_email || alert.notify_inapp) && ' · '}
+                          {[alert.notify_email && 'mail', alert.notify_inapp && 'in-app'].filter(Boolean).join(' · ')}
+                          {alert.notify_emails?.length > 0 && ` → ${alert.notify_emails.join(', ')}`}
+                          {alert.last_triggered_at && ` · disparada ${new Date(alert.last_triggered_at).toLocaleDateString('es-AR')}`}
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                        <button
+                          className={styles.reconnectButton}
+                          onClick={() => editingId === alert.id ? setEditingId(null) : openEdit(alert)}
+                        >
+                          {editingId === alert.id ? 'Cerrar' : 'Editar'}
+                        </button>
+                        <button
+                          className={styles.reconnectButton}
+                          onClick={() => toggleAlert(alert.id, alert.is_active)}
+                        >
+                          {alert.is_active ? 'Desactivar' : 'Activar'}
+                        </button>
+                        <button
+                          className={styles.cancelButton}
+                          onClick={() => deleteAlert(alert.id, alert.name)}
+                          style={{ fontSize: 12, padding: '6px 10px' }}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                      <button
-                        className={styles.reconnectButton}
-                        onClick={() => toggleAlert(alert.id, alert.is_active)}
-                      >
-                        {alert.is_active ? 'Desactivar' : 'Activar'}
-                      </button>
-                      <button
-                        className={styles.cancelButton}
-                        onClick={() => deleteAlert(alert.id, alert.name)}
-                        style={{ fontSize: 12, padding: '6px 10px' }}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
+
+                    {/* Formulario de edición inline */}
+                    {editingId === alert.id && (
+                      <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                          <div>
+                            <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                              Valor umbral
+                            </label>
+                            <input
+                              type="number"
+                              className={styles.input}
+                              value={editForm.condition_value}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, condition_value: parseFloat(e.target.value) || 0 }))}
+                              style={{ padding: '6px 10px', fontSize: 13 }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                              Período
+                            </label>
+                            <select
+                              className={styles.mappingSelect}
+                              value={editForm.date_preset}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, date_preset: e.target.value }))}
+                            >
+                              <option value="last_7d">Últimos 7 días</option>
+                              <option value="last_14d">Últimos 14 días</option>
+                              <option value="last_30d">Últimos 30 días</option>
+                              <option value="this_month">Este mes</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                            Destinatarios de email adicionales (separados por coma)
+                          </label>
+                          <input
+                            type="text"
+                            className={styles.input}
+                            placeholder="cliente@empresa.com, otro@empresa.com"
+                            value={editForm.notify_emails_raw}
+                            onChange={(e) => setEditForm((prev) => ({ ...prev, notify_emails_raw: e.target.value }))}
+                            style={{ padding: '6px 10px', fontSize: 13 }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--text-primary)' }}>
+                            <input
+                              type="checkbox"
+                              checked={editForm.notify_email}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, notify_email: e.target.checked }))}
+                            />
+                            Notificar por mail
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--text-primary)' }}>
+                            <input
+                              type="checkbox"
+                              checked={editForm.notify_inapp}
+                              onChange={(e) => setEditForm((prev) => ({ ...prev, notify_inapp: e.target.checked }))}
+                            />
+                            Notificación in-app
+                          </label>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            className={styles.saveButton}
+                            onClick={() => saveEdit(alert.id)}
+                            disabled={editSaving}
+                            style={{ fontSize: 13, padding: '6px 14px' }}
+                          >
+                            {editSaving ? 'Guardando...' : 'Guardar'}
+                          </button>
+                          <button
+                            className={styles.cancelButton}
+                            onClick={() => setEditingId(null)}
+                            style={{ fontSize: 13, padding: '6px 10px' }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

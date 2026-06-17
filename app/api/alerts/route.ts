@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   const admin = createSupabaseAdmin();
   const query = admin
     .from('alerts')
-    .select('id, name, condition_type, condition_value, date_preset, notify_email, notify_inapp, is_active, last_triggered_at, created_at')
+    .select('id, name, condition_type, condition_value, date_preset, notify_email, notify_inapp, notify_emails, is_active, last_triggered_at, created_at')
     .order('created_at', { ascending: false });
 
   if (clientId) query.eq('client_id', clientId);

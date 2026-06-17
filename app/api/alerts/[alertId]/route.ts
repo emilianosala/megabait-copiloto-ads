@@ -12,7 +12,7 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
   const body = await request.json();
-  const allowed = ['is_active', 'notify_email', 'notify_inapp', 'condition_value', 'date_preset'];
+  const allowed = ['is_active', 'notify_email', 'notify_inapp', 'notify_emails', 'condition_value', 'date_preset'];
   const patch: Record<string, any> = {};
   for (const key of allowed) {
     if (key in body) patch[key] = body[key];
