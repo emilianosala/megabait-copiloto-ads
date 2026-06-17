@@ -12,7 +12,7 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
     .from('alerts')
     .select(`
       id, name, condition_type, condition_value, date_preset,
-      notify_email, notify_inapp, last_triggered_at,
+      notify_email, notify_inapp, notify_emails, last_triggered_at,
       client_id, organization_id, created_by,
       clients (
         name,
@@ -181,10 +181,16 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
     // Enviar mail si hay RESEND_API_KEY configurado
     if (alert.notify_email && process.env.RESEND_API_KEY) {
       try {
-        const { data: userData } = await admin.auth.admin.getUserById(alert.created_by);
-        if (userData.user?.email) {
+        // Usar notify_emails si está configurado, sino fallback al creador de la alerta
+        let recipients: string[] = (alert.notify_emails ?? []).filter(Boolean);
+        if (recipients.length === 0) {
+          const { data: userData } = await admin.auth.admin.getUserById(alert.created_by);
+          if (userData.user?.email) recipients = [userData.user.email];
+        }
+
+        for (const to of recipients) {
           await sendAlertEmail({
-            to: userData.user.email,
+            to,
             alertName: alert.name,
             clientName: client.name,
             message,
@@ -192,6 +198,9 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
             clientId: alert.client_id,
             baseUrl,
           });
+        }
+
+        if (recipients.length > 0) {
           // Marcar email como enviado en la notificación recién creada
           await admin
             .from('alert_notifications')

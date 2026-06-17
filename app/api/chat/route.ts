@@ -665,6 +665,11 @@ Por defecto el analista recibe notificación por mail y en la app. Podés desact
         },
         notify_email: { type: 'boolean', description: 'Enviar notificación por mail. Default: true.' },
         notify_inapp: { type: 'boolean', description: 'Notificación en la app. Default: true.' },
+        notify_emails: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Destinatarios adicionales de email (opcional). Por defecto solo recibe el analista que creó la alerta. Podés agregar el mail del cliente u otros analistas. Ejemplo: ["cliente@empresa.com", "otro@megabait.com"].',
+        },
       },
       required: ['name', 'condition_type', 'condition_value'],
     },
@@ -687,6 +692,11 @@ Para encontrar el alert_id, primero llamá list_alerts.`,
         condition_value: { type: 'number', description: 'Nuevo valor umbral' },
         notify_email: { type: 'boolean', description: 'Activar/desactivar notificaciones por mail' },
         notify_inapp: { type: 'boolean', description: 'Activar/desactivar notificaciones in-app' },
+        notify_emails: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Reemplaza la lista de destinatarios de email. Pasá un array vacío [] para volver al comportamiento por defecto (solo el creador de la alerta).',
+        },
         date_preset: { type: 'string', enum: [...ALERT_DATE_PRESETS], description: 'Cambiar período de evaluación' },
       },
       required: ['alert_id'],
@@ -723,20 +733,26 @@ async function executeAlertTool(
       date_preset: toolInput.date_preset ?? 'last_7d',
       notify_email: toolInput.notify_email ?? true,
       notify_inapp: toolInput.notify_inapp ?? true,
-    }).select('id, name, condition_type, condition_value, date_preset, notify_email, notify_inapp').single();
+      notify_emails: toolInput.notify_emails ?? [],
+    }).select('id, name, condition_type, condition_value, date_preset, notify_email, notify_inapp, notify_emails').single();
 
     if (error) return JSON.stringify({ error: error.message });
+
+    const extraEmails: string[] = data.notify_emails ?? [];
+    const emailNote = extraEmails.length
+      ? ` — destinatarios: ${extraEmails.join(', ')}`
+      : '';
 
     return JSON.stringify({
       success: true,
       alert: data,
-      message: `Alerta creada: "${data.name}". Se evaluará diariamente (período: ${data.date_preset}). Notificaciones: ${data.notify_email ? 'mail ✓' : 'mail ✗'} ${data.notify_inapp ? 'in-app ✓' : 'in-app ✗'}.`,
+      message: `Alerta creada: "${data.name}". Se evaluará diariamente (período: ${data.date_preset}). Notificaciones: ${data.notify_email ? `mail ✓${emailNote}` : 'mail ✗'} ${data.notify_inapp ? 'in-app ✓' : 'in-app ✗'}.`,
     });
   }
 
   if (toolName === 'update_alert') {
     const { alert_id, ...patch } = toolInput;
-    const allowed = ['is_active', 'notify_email', 'notify_inapp', 'condition_value', 'date_preset'];
+    const allowed = ['is_active', 'notify_email', 'notify_inapp', 'notify_emails', 'condition_value', 'date_preset'];
     const update: Record<string, any> = {};
     for (const key of allowed) {
       if (key in patch) update[key] = patch[key];
@@ -747,7 +763,7 @@ async function executeAlertTool(
       .update(update)
       .eq('id', alert_id)
       .eq('client_id', clientId)
-      .select('name, is_active, notify_email, notify_inapp, condition_value')
+      .select('name, is_active, notify_email, notify_inapp, notify_emails, condition_value')
       .single();
 
     if (error) return JSON.stringify({ error: error.message });
@@ -762,7 +778,7 @@ async function executeAlertTool(
   if (toolName === 'list_alerts') {
     const { data, error } = await admin
       .from('alerts')
-      .select('id, name, condition_type, condition_value, date_preset, notify_email, notify_inapp, is_active, last_triggered_at')
+      .select('id, name, condition_type, condition_value, date_preset, notify_email, notify_inapp, notify_emails, is_active, last_triggered_at')
       .eq('client_id', clientId)
       .order('created_at', { ascending: false });
 
