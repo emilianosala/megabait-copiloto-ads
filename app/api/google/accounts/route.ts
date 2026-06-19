@@ -1,5 +1,6 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
+import { getClientForUser } from '@/lib/organizations';
 import { createGoogleAdsClient } from '@/lib/google-ads';
 import { NextResponse } from 'next/server';
 
@@ -49,6 +50,10 @@ export async function GET(request: Request) {
   }
 
   const admin = createSupabaseAdmin();
+  if (!(await getClientForUser(admin, user.id, clientId, 'id'))) {
+    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
+  }
+
   const { data: connection } = await admin
     .from('google_connections')
     .select('refresh_token')

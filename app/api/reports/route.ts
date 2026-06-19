@@ -1,5 +1,6 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
+import { getClientForUser } from '@/lib/organizations';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
@@ -10,12 +11,7 @@ export async function POST(request: NextRequest) {
   const { clientId, title, since, until, sources, sections } = await request.json();
 
   const admin = createSupabaseAdmin();
-  const { data: client } = await admin
-    .from('clients')
-    .select('organization_id')
-    .eq('id', clientId)
-    .single();
-
+  const client = await getClientForUser(admin, user.id, clientId, 'organization_id');
   if (!client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
 
   const { data, error } = await admin.from('reports').insert({

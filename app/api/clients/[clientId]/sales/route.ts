@@ -1,5 +1,6 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
+import { getClientForUser } from '@/lib/organizations';
 import { NextRequest, NextResponse } from 'next/server';
 
 function parseCSVLine(line: string): string[] {
@@ -58,6 +59,10 @@ export async function GET(
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
   const admin = createSupabaseAdmin();
+  if (!(await getClientForUser(admin, user.id, clientId, 'id'))) {
+    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
+  }
+
   const { data, error } = await admin
     .from('sales_data')
     .select('date, amount, currency')
@@ -102,12 +107,7 @@ export async function POST(
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
   const admin = createSupabaseAdmin();
-  const { data: client } = await admin
-    .from('clients')
-    .select('organization_id')
-    .eq('id', clientId)
-    .single();
-
+  const client = await getClientForUser(admin, user.id, clientId, 'organization_id');
   if (!client) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
 
   const { csvText, mapping }: { csvText: string; mapping: Mapping } = await request.json();

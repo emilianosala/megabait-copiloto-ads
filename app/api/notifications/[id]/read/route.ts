@@ -1,5 +1,6 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
+import { rowBelongsToUserOrg } from '@/lib/organizations';
 import { NextResponse } from 'next/server';
 
 export async function PATCH(
@@ -12,6 +13,10 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
   const admin = createSupabaseAdmin();
+  if (!(await rowBelongsToUserOrg(admin, user.id, 'alert_notifications', id))) {
+    return NextResponse.json({ error: 'Notificación no encontrada' }, { status: 404 });
+  }
+
   const { error } = await admin
     .from('alert_notifications')
     .update({ read: true })

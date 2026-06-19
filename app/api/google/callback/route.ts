@@ -1,5 +1,6 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
+import { getClientForUser } from '@/lib/organizations';
 import { createOAuthClient } from '@/lib/google-oauth';
 import { NextResponse } from 'next/server';
 
@@ -28,6 +29,13 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/clients/${clientId}/edit?google=error`);
   }
 
+  const admin = createSupabaseAdmin();
+
+  // El cliente al que se quiere colgar la conexión tiene que ser de la org del usuario.
+  if (!(await getClientForUser(admin, user.id, clientId, 'id'))) {
+    return NextResponse.redirect(`${origin}/dashboard?google=error`);
+  }
+
   const oauthClient = createOAuthClient();
   const { tokens } = await oauthClient.getToken(code);
 
@@ -37,7 +45,6 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/clients/${clientId}/edit?google=no_refresh_token`);
   }
 
-  const admin = createSupabaseAdmin();
   const { error } = await admin
     .from('google_connections')
     .upsert(

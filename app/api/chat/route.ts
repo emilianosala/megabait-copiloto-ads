@@ -6,6 +6,8 @@ import { getGoogleCampaigns, getGoogleCampaignDetail } from '@/lib/google-ads';
 import { getGA4Metrics, GA4_METRICS, GA4_DIMENSIONS } from '@/lib/google-analytics';
 import { getAccountInsights, getCampaigns } from '@/lib/meta-ads';
 import { logApiCall } from '@/lib/api-audit';
+import { checkRateLimit } from '@/lib/rate-limiter';
+import { getUserOrgId } from '@/lib/organizations';
 import { NextResponse } from 'next/server';
 
 // ── Meta Ads Tool Use ─────────────────────────────────────────────────────────
@@ -85,6 +87,9 @@ async function executeMetaTool(
   clientId: string,
   organizationId: string,
 ): Promise<string> {
+  const rateLimitError = await checkRateLimit(organizationId, 'meta');
+  if (rateLimitError) return JSON.stringify({ error: rateLimitError });
+
   // Siempre retorna string — nunca propaga excepciones al loop de tool use.
   // Si algo falla, Claude recibe el mensaje de error y puede responderle al usuario.
   try {
@@ -271,6 +276,9 @@ async function executeGoogleAdsTool(
   clientId: string,
   organizationId: string,
 ): Promise<string> {
+  const rateLimitError = await checkRateLimit(organizationId, 'google');
+  if (rateLimitError) return JSON.stringify({ error: rateLimitError });
+
   try {
     const { date_preset, since, until, campaign_id } = toolInput;
 
@@ -369,6 +377,9 @@ async function executeGA4Tool(
   clientId: string,
   organizationId: string,
 ): Promise<string> {
+  const rateLimitError = await checkRateLimit(organizationId, 'google');
+  if (rateLimitError) return JSON.stringify({ error: rateLimitError });
+
   try {
     const metrics: string[] = toolInput.metrics?.length
       ? toolInput.metrics
@@ -898,6 +909,14 @@ export async function POST(request: Request) {
       { error: 'Cliente no encontrado' },
       { status: 404 },
     );
+  }
+
+  // Autorización: el cliente tiene que pertenecer a la org del usuario.
+  // Sin esto, cualquier usuario logueado podría chatear contra clientes ajenos
+  // y consumir sus tokens de Meta/Google.
+  const userOrgId = await getUserOrgId(adminForClient, user.id);
+  if (!userOrgId || client.organization_id !== userOrgId) {
+    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
   }
 
   // Google Ads: obtener refresh_token para las tools

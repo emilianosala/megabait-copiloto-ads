@@ -1,5 +1,6 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
+import { getClientForUser } from '@/lib/organizations';
 import { exchangeCodeForToken } from '@/lib/meta-oauth';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -10,12 +11,10 @@ export async function GET(request: NextRequest) {
   const oauthError = searchParams.get('error');
 
   if (oauthError || !code || !state) {
-    console.error('[meta/callback] early fail — oauthError:', oauthError, 'code:', !!code, 'state:', !!state);
     return NextResponse.redirect(`${origin}/dashboard?meta=error&r=early`);
   }
 
   // state = userId + clientId (dos UUIDs de 36 chars, sin separador)
-  console.error('[meta/callback] state length:', state.length, 'state:', state);
   if (state.length !== 72) {
     return NextResponse.redirect(`${origin}/dashboard?meta=error&r=state${state.length}`);
   }
@@ -26,15 +25,20 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   // Verificar que el state coincide con el usuario autenticado (anti-CSRF)
-  console.error('[meta/callback] user:', user?.id, 'userId from state:', userId);
   if (!user || user.id !== userId) {
     return NextResponse.redirect(`${origin}/clients/${clientId}/edit?meta=error&r=auth`);
   }
 
   try {
+    const admin = createSupabaseAdmin();
+
+    // El cliente al que se quiere colgar la conexión tiene que ser de la org del usuario.
+    if (!(await getClientForUser(admin, user.id, clientId, 'id'))) {
+      return NextResponse.redirect(`${origin}/dashboard?meta=error&r=auth`);
+    }
+
     const accessToken = await exchangeCodeForToken(code);
 
-    const admin = createSupabaseAdmin();
     const { error: dbError } = await admin
       .from('meta_connections')
       .upsert(

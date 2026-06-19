@@ -202,6 +202,33 @@ Orden de rotación, de mayor a menor riesgo:
 
 ---
 
+## ✅ Rate limiting backend (P3b) — COMPLETADO (junio 2026)
+
+- `lib/rate-limiter.ts`: límite por organización y plataforma (Meta 20/min, Google 15/min), usando `api_audit_log` como ventana deslizante de 60s. Fail-open (si la query falla, deja pasar — nunca rompe el chat).
+- Conectado en el chat (`executeMetaTool`, `executeGoogleAdsTool`, `executeGA4Tool`).
+- Índice `api_audit_log_rate_limit_idx` (`supabase/010_rate_limiter_index.sql`, corrido en Supabase).
+
+---
+
+## ✅ Fix de autorización a nivel de objeto (IDOR) — COMPLETADO (junio 2026)
+
+**Qué estaba roto:** las API routes por-ID usaban el admin client (que bypasea RLS) filtrando solo por el ID del recurso, sin verificar que perteneciera a la org del usuario. Cualquier usuario logueado podía leer/editar/borrar clientes, conversaciones, alertas, ventas y reportes de otra organización cambiando el ID en la URL.
+
+**Qué se hizo:**
+- Helpers `getClientForUser` y `rowBelongsToUserOrg` en `lib/organizations.ts`.
+- Verificación de ownership agregada en: `clients/[clientId]` (GET/PATCH/DELETE), `conversations/[clientId]`, `alerts/[alertId]` (PATCH/DELETE), `alerts` (GET — ahora siempre acotado a la org), `chat`, `reports`, `sales` (GET/POST), `meta/callback`, `google/callback`, `notifications/[id]/read`.
+- Whitelist de campos en `PATCH /api/clients/[clientId]` (antes pasaba el body crudo a `.update()`, permitiendo cambiar `organization_id`).
+
+---
+
+## 📋 Deuda técnica de seguridad (pendiente, no bloqueante para early adopters)
+
+1. **Centralizar el rate limiting en la capa de fetch** (`lib/meta-ads.ts`, `lib/google-ads.ts`, `lib/google-analytics.ts`) pasándoles el `organization_id`. Hoy el check vive en las funciones `execute*` del chat; el cron de alertas (`lib/alerts.ts`) llama a las APIs directo y no pasa por el limiter. Riesgo bajo (el cron hace pocas llamadas por org/día), pero centralizar lo vuelve imposible de bypassear desde cualquier call path futuro.
+2. **Encriptar tokens en la DB.** `access_token` (Meta) y `refresh_token` (Google) se guardan en texto plano en `meta_connections`/`google_connections`. Evaluar encriptación a nivel columna (pgsodium/Vault de Supabase) o al menos restringir el acceso.
+3. **Manejo de expiración del token de Meta (~60 días).** No hay refresh ni tracking de vencimiento. Si un token expira, Jair falla sin mensaje claro. Detectar el error de token expirado y devolver un mensaje accionable ("reconectá Meta desde la edición del cliente"); idealmente, la alerta proactiva "el token vence en 7 días" que ya figura en P8.
+
+---
+
 ## ⏳ Bloqueantes externos
 
 - **Google Ads Developer Token**: rechazado por uso de Gmail. Pendiente configurar email corporativo `@megabait.com.ar` (Google Workspace o Zoho Mail) y reaplicar. **Menos crítico ahora** — si delegamos análisis en el MCP oficial de Google Ads (read-only), el Developer Token solo se necesita para escribir, lo cual está bloqueado para todos hoy (ni MCP ni nadie soporta write en Google Ads sin token aprobado).
@@ -529,6 +556,29 @@ Más valioso cuando P5 (GA4) y P6 (Google Ads tools) estén completos — así e
 Es un producto en sí mismo, no un efecto secundario del uso. No construir hasta validar que el volumen de datos lo justifica.
 
 **Propiedad de los datos agregados:** los datos crudos de cada cliente son de la organización. Los patrones agregados/anonimizados son de Megabait — siempre que estén correctamente anonimizados.
+
+---
+
+## 📋 P18 — Curso de onboarding técnico para el dueño del producto (último, post-lanzamiento)
+
+Emiliano (dueño del producto) es no-técnico y quiere entender cómo funciona todo el proyecto. Armar un "curso" como archivos markdown dentro del repo (ej: `docs/aprendizaje/`), organizado como materias, para leer a su ritmo.
+
+**Formato de cada concepto (no negociable):**
+- Nivel 1: explicación como si tuviera 10 años
+- Nivel 2: el término técnico
+- Nivel 3: cómo se ve en código
+- Usar **derivación lógica paso a paso** (una idea por línea, orden causal, cerrar con "por lo tanto") — es el formato que mejor consume.
+
+**Índice tentativo (a criterio del que lo arme):**
+1. Fundamentos — app web, frontend vs backend, qué es una base de datos
+2. El stack — Next.js, Supabase, Anthropic, Vercel (qué hace cada uno y por qué)
+3. Organización del código — el recorrido de un click, carpeta por carpeta
+4. Autenticación y seguridad — login, RLS, IDOR, tokens
+5. El cerebro: Jair y la IA — cómo el chat habla con Claude, qué son las "tools"
+6. Integraciones — OAuth con Meta y Google
+7. Las features por dentro — reportes, alertas, datos de ventas
+
+**Por qué al final:** armarlo ahora frenaría el lanzamiento; aprender se hace mejor sin presión.
 
 ---
 

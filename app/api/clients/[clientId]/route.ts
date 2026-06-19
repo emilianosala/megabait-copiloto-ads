@@ -1,6 +1,15 @@
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
+import { getClientForUser } from '@/lib/organizations';
 import { NextResponse } from 'next/server';
+
+// Campos que el usuario puede modificar. NUNCA incluir organization_id ni id:
+// pasar el body crudo a .update() permitiría mover el cliente a otra org.
+const EDITABLE_FIELDS = [
+  'name', 'industry', 'description', 'objectives', 'budget', 'kpis',
+  'restrictions', 'google_ads_account_id', 'meta_ads_account_id',
+  'logo_url', 'google_analytics_property_id',
+];
 
 export async function GET(
   request: Request,
@@ -15,17 +24,12 @@ export async function GET(
   }
 
   const admin = createSupabaseAdmin();
-  const { data, error } = await admin
-    .from('clients')
-    .select('*')
-    .eq('id', clientId)
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  const client = await getClientForUser(admin, user.id, clientId);
+  if (!client) {
+    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json(client);
 }
 
 export async function PATCH(
@@ -38,12 +42,21 @@ export async function PATCH(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-  const body = await request.json();
   const admin = createSupabaseAdmin();
+  const client = await getClientForUser(admin, user.id, clientId, 'id');
+  if (!client) {
+    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
+  }
+
+  const body = await request.json();
+  const update: Record<string, any> = {};
+  for (const field of EDITABLE_FIELDS) {
+    if (field in body) update[field] = body[field];
+  }
 
   const { data, error } = await admin
     .from('clients')
-    .update(body)
+    .update(update)
     .eq('id', clientId)
     .select()
     .single();
@@ -66,6 +79,11 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
   const admin = createSupabaseAdmin();
+  const client = await getClientForUser(admin, user.id, clientId, 'id');
+  if (!client) {
+    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
+  }
+
   const { error } = await admin.from('clients').delete().eq('id', clientId);
 
   if (error) {
