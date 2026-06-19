@@ -596,7 +596,7 @@ Secciones posibles:
       until: { type: 'string', description: 'Fecha fin YYYY-MM-DD. Solo usar si el analista pide un rango específico que no cubre date_preset.' },
       sections: {
         type: 'array',
-        description: 'Secciones del reporte en orden de aparición',
+        description: 'Secciones del reporte en orden de aparición.',
         items: {
           type: 'object' as const,
           properties: {
@@ -625,7 +625,7 @@ Secciones posibles:
         },
       },
     },
-    required: ['title', 'since', 'until', 'sections'],
+    required: ['title', 'sections'],
   },
 };
 
@@ -962,11 +962,26 @@ export async function POST(request: Request) {
     .eq('is_active', true)
     .order('created_at', { ascending: false });
 
+  // Fecha de referencia para el modelo (zona horaria de Argentina).
+  // Sin esto, Claude calcula fechas con su conocimiento base (que es de un año
+  // anterior) y los reportes salen con el año equivocado.
+  const hoyLargo = new Date().toLocaleDateString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+  const hoyISO = new Date().toLocaleDateString('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+  });
+
   const systemMessage = `# IDENTIDAD
 
-Sos el Agente Senior de Megabait, el "Segundo Analista" de Emiliano Sala. Trabajás como un analista de marketing digital con años de experiencia ejecutando y diagnosticando campañas en Meta Ads, Google Ads y Google Analytics. Tu trabajo no es ejecutar — es ayudar al analista humano a pensar mejor, detectar lo que se le escapa, y proponer movimientos con criterio.
+Te llamás **Jair**. Sos el Agente Senior de Megabait, el "Segundo Analista" de Emiliano Sala. Trabajás como un analista de marketing digital con años de experiencia ejecutando y diagnosticando campañas en Meta Ads, Google Ads y Google Analytics. Tu trabajo no es ejecutar — es ayudar al analista humano a pensar mejor, detectar lo que se le escapa, y proponer movimientos con criterio.
 
-Tu tono es profesional, directo y accesible. Hablás en español rioplatense. Tenés ingenio rosarino pero usado con medida — no forzás chistes ni modismos cuando la consulta es técnica.
+Tu tono es profesional, directo y accesible. Hablás en español rioplatense. Tenés ingenio rosarino pero usado con medida — no forzás chistes ni modismos cuando la consulta es técnica. Si te preguntan tu nombre, sos Jair.
+
+# CONTEXTO TEMPORAL
+
+Hoy es **${hoyLargo}** (${hoyISO}). Usá siempre esta fecha como referencia para cualquier cálculo de períodos, rangos o "último mes". No asumas otro año. Cuando uses tools con \`since\`/\`until\`, calculá las fechas a partir de hoy.
 
 # CONTEXTO DEL CLIENTE ACTUAL
 

@@ -193,7 +193,15 @@ export default function ChatPage() {
                 {msg.role === 'user' ? 'Vos' : 'Agente'}
               </span>
               <div className={styles.messageContent}>
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <ReactMarkdown
+                  components={{
+                    a: ({ node, ...props }) => (
+                      <a {...props} target="_blank" rel="noopener noreferrer" />
+                    ),
+                  }}
+                >
+                  {msg.content}
+                </ReactMarkdown>
               </div>
             </div>
           ))
