@@ -2,9 +2,14 @@ export const META_AUTH_URL = 'https://www.facebook.com/v19.0/dialog/oauth';
 export const META_TOKEN_URL = 'https://graph.facebook.com/v19.0/oauth/access_token';
 export const META_LONG_LIVED_TOKEN_URL = 'https://graph.facebook.com/v19.0/oauth/access_token';
 
+// Solo lectura: el producto hoy no escribe en Meta (crear/editar campañas es P4,
+// detrás de los action approval gates). Pedir ads_management (write) sin usarlo
+// dispara un App Review más estricto y es causa común de rechazo.
+// business_management se mantiene para poder LISTAR las cuentas que viven dentro
+// del Business Manager del cliente; candidato a sacar si en preview se confirma
+// que /me/adaccounts las lista con ads_read solo. Ver memoria platform-api-access.
 export const META_SCOPES = [
   'ads_read',
-  'ads_management',
   'business_management',
 ].join(',');
 
