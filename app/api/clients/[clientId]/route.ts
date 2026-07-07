@@ -62,7 +62,18 @@ export async function PATCH(
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Registrar el error completo de Postgres para no quedar a ciegas en Vercel.
+    console.error('[clients PATCH] error al actualizar cliente', clientId, {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      campos: Object.keys(update),
+    });
+    return NextResponse.json(
+      { error: error.message, details: error.details, hint: error.hint, code: error.code },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json(data);

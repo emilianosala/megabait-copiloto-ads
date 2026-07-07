@@ -327,7 +327,9 @@ function EditClientContent() {
     if (res.ok) {
       router.push('/dashboard');
     } else {
-      alert('Error al guardar');
+      const data = await res.json().catch(() => null);
+      const detalle = data?.error ? `\n\nDetalle: ${data.error}` : '';
+      alert(`Error al guardar${detalle}`);
       setLoading(false);
     }
   };
