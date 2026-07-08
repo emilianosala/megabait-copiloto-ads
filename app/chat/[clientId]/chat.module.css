@@ -49,6 +49,25 @@
   border-color: var(--border-hover);
 }
 
+/* Selector de modelo de IA — elegible por conversación. Estilo alineado
+   con .newChatButton para que se sienta parte del mismo grupo del header. */
+.modelSelect {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.modelSelect:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
 .clientName {
   font-size: 15px;
   font-weight: 600;

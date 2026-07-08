@@ -8,6 +8,7 @@ import { getAccountInsights, getCampaigns } from '@/lib/meta-ads';
 import { logApiCall } from '@/lib/api-audit';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserOrgId } from '@/lib/organizations';
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from '@/lib/models';
 import { NextResponse } from 'next/server';
 
 // ── Meta Ads Tool Use ─────────────────────────────────────────────────────────
@@ -886,8 +887,14 @@ async function executeCreateReport(
 
 export async function POST(request: Request) {
   try {
-  const { clientId, message, history } = await request.json();
+  const { clientId, message, history, model } = await request.json();
   const supabase = await createSupabaseServer();
+
+  // El modelo lo elige el analista por conversación. Validamos contra una
+  // lista blanca: si llega algo desconocido (o nada), caemos a Sonnet 5.
+  const selectedModel = CHAT_MODELS.some((m) => m.id === model)
+    ? model
+    : DEFAULT_CHAT_MODEL;
 
   const {
     data: { user },
@@ -1222,7 +1229,7 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
     isFirstCall = false;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: selectedModel,
       max_tokens: 4096,
       system: systemMessage,
       messages,

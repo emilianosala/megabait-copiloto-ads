@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from '@/lib/models';
 import styles from './chat.module.css';
 
 interface Client {
@@ -23,6 +24,7 @@ export default function ChatPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const [model, setModel] = useState(DEFAULT_CHAT_MODEL);
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -88,6 +90,7 @@ export default function ChatPage() {
           clientId,
           message: trimmedInput,
           history: messages,
+          model,
         }),
         signal: controller.signal,
       });
@@ -156,6 +159,22 @@ export default function ChatPage() {
           <p className={styles.clientName}>{client.name}</p>
           <p className={styles.clientIndustry}>{client.industry}</p>
         </div>
+        <select
+          className={styles.modelSelect}
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          title={
+            CHAT_MODELS.find((m) => m.id === model)?.hint ??
+            'Elegí el modelo de IA según la tarea'
+          }
+          aria-label="Modelo de IA"
+        >
+          {CHAT_MODELS.map((m) => (
+            <option key={m.id} value={m.id} title={m.hint}>
+              {m.label}
+            </option>
+          ))}
+        </select>
         {messages.length > 0 && (
           <button
             className={styles.newChatButton}
