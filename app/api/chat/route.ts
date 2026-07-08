@@ -887,7 +887,7 @@ async function executeCreateReport(
 
 export async function POST(request: Request) {
   try {
-  const { clientId, message, history, model } = await request.json();
+  const { clientId, message, history, model, image } = await request.json();
   const supabase = await createSupabaseServer();
 
   // El modelo lo elige el analista por conversación. Validamos contra una
@@ -1199,9 +1199,38 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
   // Ciclo de Tool Use
   // Necesario porque Claude puede encadenar múltiples tool calls
   // (ej: consulta last_7d y luego last_30d para comparar).
+  // Cada mensaje puede traer una captura adjunta (visión). Convertimos cada
+  // item —del historial de la sesión y el actual— a un MessageParam: si tiene
+  // imagen, el contenido es un array [imagen, texto]; si no, es texto plano.
+  type IncomingMsg = {
+    role: 'user' | 'assistant';
+    content: string;
+    image?: { mediaType: string; data: string };
+  };
+  const ALLOWED_IMG = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
+  type AllowedImg = (typeof ALLOWED_IMG)[number];
+
+  const toParam = (m: IncomingMsg): Anthropic.MessageParam => {
+    if (m.image?.data && m.role === 'user') {
+      const mt: AllowedImg = (ALLOWED_IMG as readonly string[]).includes(m.image.mediaType)
+        ? (m.image.mediaType as AllowedImg)
+        : 'image/jpeg';
+      const blocks: Anthropic.ContentBlockParam[] = [
+        { type: 'image', source: { type: 'base64', media_type: mt, data: m.image.data } },
+      ];
+      if (m.content?.trim()) blocks.push({ type: 'text', text: m.content });
+      return { role: 'user', content: blocks };
+    }
+    return { role: m.role, content: m.content };
+  };
+
+  const historyParams = Array.isArray(history)
+    ? (history as IncomingMsg[]).map(toParam)
+    : [];
+
   const messages: Anthropic.MessageParam[] = [
-    ...history,
-    { role: 'user', content: message },
+    ...historyParams,
+    toParam({ role: 'user', content: message, image: image ?? undefined }),
   ];
 
   const origin = new URL(request.url).origin;
@@ -1330,8 +1359,14 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
       }
 
       // Guardar en Supabase una vez que se enviaron todos los chunks
+      // Guardamos solo texto. La captura (base64) no se persiste para no
+      // inflar la base; se marca con 📎 para dejar rastro en el historial.
+      const savedUserContent = image
+        ? (message?.trim() ? `📎 ${message}` : '📎 (captura adjunta)')
+        : message;
+
       await adminForClient.from('conversations').insert([
-        { client_id: clientId, user_id: user.id, role: 'user', content: message },
+        { client_id: clientId, user_id: user.id, role: 'user', content: savedUserContent },
         { client_id: clientId, user_id: user.id, role: 'assistant', content: assistantMessage },
       ]);
 

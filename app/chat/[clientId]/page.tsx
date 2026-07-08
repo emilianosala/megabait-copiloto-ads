@@ -13,10 +13,20 @@ interface Client {
   industry: string;
 }
 
+interface AttachedImage {
+  mediaType: string;
+  data: string; // base64 sin el prefijo "data:...;base64,"
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  image?: AttachedImage;
 }
+
+// Máximo del lado largo al que reescalamos la captura antes de enviarla.
+// Mantiene el tamaño (y el costo en tokens) razonable y el texto legible.
+const MAX_IMAGE_EDGE = 1568;
 
 export default function ChatPage() {
   const { clientId } = useParams();
@@ -26,9 +36,13 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [model, setModel] = useState(DEFAULT_CHAT_MODEL);
   const [loading, setLoading] = useState(false);
+  const [pendingImage, setPendingImage] = useState<
+    (AttachedImage & { preview: string }) | null
+  >(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch(`/api/clients/${clientId}`)
@@ -65,14 +79,87 @@ export default function ChatPage() {
     // Shift+Enter: comportamiento default del textarea (nueva línea)
   };
 
+  // Reescala la imagen a un lado largo máximo y la reencoda como JPEG.
+  // Achica el tamaño del envío (importante por el límite de request de Vercel)
+  // manteniendo el texto de un dashboard legible. Devuelve base64 + preview.
+  const processImageFile = (
+    file: File | Blob,
+  ): Promise<AttachedImage & { preview: string }> =>
+    new Promise((resolve, reject) => {
+      if (!file.type.startsWith('image/')) {
+        reject(new Error('El archivo no es una imagen.'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('No se pudo cargar la imagen.'));
+        img.onload = () => {
+          const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(img.width, img.height));
+          const width = Math.round(img.width * scale);
+          const height = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('No se pudo procesar la imagen.'));
+            return;
+          }
+          // Fondo blanco: JPEG no soporta transparencia.
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          const preview = canvas.toDataURL('image/jpeg', 0.9);
+          resolve({ mediaType: 'image/jpeg', data: preview.split(',')[1], preview });
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+
+  const attachImage = async (file: File | Blob) => {
+    try {
+      setPendingImage(await processImageFile(file));
+    } catch (err: any) {
+      console.error('[chat] imagen:', err);
+      alert(err.message || 'No se pudo adjuntar la imagen.');
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const item = Array.from(e.clipboardData.items).find((it) =>
+      it.type.startsWith('image/'),
+    );
+    if (!item) return; // Sin imagen: dejar el pegado de texto normal.
+    e.preventDefault();
+    const file = item.getAsFile();
+    if (file) attachImage(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // Permite volver a elegir el mismo archivo.
+    if (file) attachImage(file);
+  };
+
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    if ((!input.trim() && !pendingImage) || loading) return;
 
     const trimmedInput = input.trim();
-    const userMessage: Message = { role: 'user', content: trimmedInput };
+    const attached: AttachedImage | undefined = pendingImage
+      ? { mediaType: pendingImage.mediaType, data: pendingImage.data }
+      : undefined;
+    const userMessage: Message = {
+      role: 'user',
+      content: trimmedInput,
+      ...(attached && { image: attached }),
+    };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
+    setPendingImage(null);
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -91,6 +178,7 @@ export default function ChatPage() {
           message: trimmedInput,
           history: messages,
           model,
+          image: attached ?? null,
         }),
         signal: controller.signal,
       });
@@ -213,16 +301,25 @@ export default function ChatPage() {
                 {msg.role === 'user' ? 'Vos' : 'Agente'}
               </span>
               <div className={styles.messageContent}>
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    a: ({ node, ...props }) => (
-                      <a {...props} target="_blank" rel="noopener noreferrer" />
-                    ),
-                  }}
-                >
-                  {msg.content}
-                </ReactMarkdown>
+                {msg.image && (
+                  <img
+                    className={styles.messageImage}
+                    src={`data:${msg.image.mediaType};base64,${msg.image.data}`}
+                    alt="Captura adjunta"
+                  />
+                )}
+                {msg.content && (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ node, ...props }) => (
+                        <a {...props} target="_blank" rel="noopener noreferrer" />
+                      ),
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                )}
               </div>
             </div>
           ))
@@ -237,14 +334,44 @@ export default function ChatPage() {
       </div>
 
       <div className={styles.inputArea}>
+        {pendingImage && (
+          <div className={styles.imagePreview}>
+            <img src={pendingImage.preview} alt="Vista previa de la captura" />
+            <button
+              type="button"
+              className={styles.imagePreviewRemove}
+              onClick={() => setPendingImage(null)}
+              title="Quitar captura"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <div className={styles.inputWrapper}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            className={styles.attachButton}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            title="Adjuntar una captura de pantalla"
+          >
+            📎
+          </button>
           <textarea
             ref={textareaRef}
             className={styles.input}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder={`Preguntale algo sobre ${client.name}... (Shift+Enter para nueva línea)`}
+            onPaste={handlePaste}
+            placeholder={`Preguntale algo sobre ${client.name}... (podés pegar una captura con Ctrl+V)`}
             disabled={loading}
             rows={1}
           />
@@ -256,7 +383,7 @@ export default function ChatPage() {
             <button
               className={styles.sendButton}
               onClick={sendMessage}
-              disabled={!input.trim()}
+              disabled={!input.trim() && !pendingImage}
             >
               Enviar
             </button>
