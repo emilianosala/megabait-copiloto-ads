@@ -319,10 +319,23 @@ function EditClientContent() {
 
   const handleSubmit = async () => {
     setLoading(true);
+    // La moneda no la elige el analista: la tomamos de la cuenta seleccionada
+    // (Google/Meta ya la devuelven). Solo la seteamos si la lista de cuentas ya
+    // cargó, para no pisar el valor guardado con null por una carga pendiente.
+    const payload: Record<string, any> = { ...form };
+    if (accounts) {
+      payload.google_ads_currency =
+        accounts.find((a) => a.id === form.google_ads_account_id)?.currency ?? null;
+    }
+    if (metaAccounts) {
+      payload.meta_ads_currency =
+        metaAccounts.find((a) => a.id === form.meta_ads_account_id)?.currency ?? null;
+    }
+
     const res = await fetch(`/api/clients/${clientId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       router.push('/dashboard');

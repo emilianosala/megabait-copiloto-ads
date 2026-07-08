@@ -9,6 +9,7 @@ const EDITABLE_FIELDS = [
   'name', 'industry', 'description', 'objectives', 'budget', 'kpis',
   'restrictions', 'google_ads_account_id', 'meta_ads_account_id',
   'logo_url', 'google_analytics_property_id',
+  'google_ads_currency', 'meta_ads_currency',
 ];
 
 export async function GET(
