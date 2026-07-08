@@ -115,6 +115,36 @@
   margin-bottom: 8px;
 }
 
+/* Tablas Markdown (GFM). display:block + overflow-x para que una tabla ancha
+   scrollee dentro de la burbuja en vez de romper el layout. */
+.messageContent table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.messageContent th,
+.messageContent td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.messageContent th {
+  background: var(--bg-elevated);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.messageContent tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
 .messageUser .messageContent {
   background: var(--accent-dim);
   border-color: rgba(57, 255, 20, 0.2);
