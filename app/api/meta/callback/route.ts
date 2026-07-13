@@ -53,7 +53,14 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.redirect(`${origin}/clients/${clientId}/edit?meta=connected`);
   } catch (err) {
-    console.error('Error en Meta callback:', err);
-    return NextResponse.redirect(`${origin}/clients/${clientId}/edit?meta=error`);
+    // El caso más común en el pilot: la app está en modo desarrollo y el usuario
+    // no está agregado como tester, o el token no se pudo intercambiar. Antes esto
+    // caía en un "Error" mudo; ahora mostramos el mensaje real de Meta para que el
+    // analista (y nosotros en los logs) sepamos qué pasó.
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error('Error en Meta callback (intercambio de token):', detail);
+    return NextResponse.redirect(
+      `${origin}/clients/${clientId}/edit?meta=error&r=token&e=${encodeURIComponent(detail.slice(0, 140))}`,
+    );
   }
 }

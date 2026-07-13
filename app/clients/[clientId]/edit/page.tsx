@@ -306,7 +306,20 @@ function EditClientContent() {
       loadMetaAccounts();
       router.replace(`/clients/${clientId}/edit`);
     } else if (metaParam === 'error') {
-      alert('Error al conectar Meta Ads. Intentá de nuevo.');
+      const reason = searchParams.get('r');
+      const detail = searchParams.get('e'); // ya viene decodificado por URLSearchParams
+      let msg = 'Error al conectar Meta Ads. Intentá de nuevo.';
+      if (reason === 'auth') {
+        msg = 'La sesión no coincide con la autorización. Cerrá sesión, volvé a entrar y reintentá.';
+      } else if (reason === 'token') {
+        msg =
+          'Meta rechazó la conexión.' +
+          (detail ? `\n\nDetalle: ${detail}` : '') +
+          '\n\nSi la app está en modo desarrollo, agregá tu usuario como tester en Meta for Developers antes de conectar.';
+      } else if (detail) {
+        msg += `\n\nDetalle: ${detail}`;
+      }
+      alert(msg);
       router.replace(`/clients/${clientId}/edit`);
     }
   }, [searchParams]);
