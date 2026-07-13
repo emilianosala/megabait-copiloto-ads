@@ -17,7 +17,9 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
       clients (
         name,
         meta_ads_account_id,
-        google_ads_account_id
+        google_ads_account_id,
+        meta_ads_currency,
+        google_ads_currency
       )
     `)
     .eq('is_active', true);
@@ -61,6 +63,9 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
 
         if (!insights) continue;
 
+        // La moneda ya viene aplicada al monto (spend está en la moneda de la
+        // cuenta); solo etiquetamos con la moneda real en vez de asumir USD.
+        const cur = client.meta_ads_currency ? ` ${client.meta_ads_currency}` : '';
         const spend = parseFloat(insights.spend ?? '0');
         const clicks = parseInt(insights.clicks ?? '0');
         const ctr = parseFloat(insights.ctr ?? '0') * 100;
@@ -75,13 +80,13 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
           metricValue = conversions > 0 ? spend / conversions : null;
           if (metricValue !== null && metricValue > alert.condition_value) {
             conditionMet = true;
-            message = `El CPA de Meta Ads es $${metricValue.toFixed(2)} USD — supera el umbral de $${alert.condition_value} USD (${alert.date_preset}).`;
+            message = `El CPA de Meta Ads es $${metricValue.toFixed(2)}${cur} — supera el umbral de $${alert.condition_value}${cur} (${alert.date_preset}).`;
           }
         } else if (alert.condition_type === 'meta_spend_above') {
           metricValue = spend;
           if (spend > alert.condition_value) {
             conditionMet = true;
-            message = `El gasto en Meta Ads es $${spend.toFixed(2)} USD — supera el umbral de $${alert.condition_value} USD (${alert.date_preset}).`;
+            message = `El gasto en Meta Ads es $${spend.toFixed(2)}${cur} — supera el umbral de $${alert.condition_value}${cur} (${alert.date_preset}).`;
           }
         } else if (alert.condition_type === 'meta_ctr_below') {
           metricValue = ctr;
@@ -108,6 +113,9 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
 
         if (!campaigns.length) continue;
 
+        // c.cost_usd es un nombre engañoso: cost_micros/1e6 ya viene en la
+        // moneda de la cuenta, no en USD. Etiquetamos con la moneda real.
+        const cur = client.google_ads_currency ? ` ${client.google_ads_currency}` : '';
         const totalCost = campaigns.reduce((acc, c) => acc + c.cost_usd, 0);
         const totalConversions = campaigns.reduce((acc, c) => acc + c.conversions, 0);
         const totalClicks = campaigns.reduce((acc, c) => acc + c.clicks, 0);
@@ -118,13 +126,13 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
           metricValue = totalConversions > 0 ? totalCost / totalConversions : null;
           if (metricValue !== null && metricValue > alert.condition_value) {
             conditionMet = true;
-            message = `El CPA de Google Ads es $${metricValue.toFixed(2)} USD — supera el umbral de $${alert.condition_value} USD (${alert.date_preset}).`;
+            message = `El CPA de Google Ads es $${metricValue.toFixed(2)}${cur} — supera el umbral de $${alert.condition_value}${cur} (${alert.date_preset}).`;
           }
         } else if (alert.condition_type === 'google_spend_above') {
           metricValue = totalCost;
           if (totalCost > alert.condition_value) {
             conditionMet = true;
-            message = `El gasto en Google Ads es $${totalCost.toFixed(2)} USD — supera el umbral de $${alert.condition_value} USD (${alert.date_preset}).`;
+            message = `El gasto en Google Ads es $${totalCost.toFixed(2)}${cur} — supera el umbral de $${alert.condition_value}${cur} (${alert.date_preset}).`;
           }
         } else if (alert.condition_type === 'google_ctr_below') {
           metricValue = avgCtr;
@@ -168,14 +176,20 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
     if (!conditionMet || metricValue === null) continue;
 
     // Crear notificación in-app
+    let notificationId: string | null = null;
     if (alert.notify_inapp) {
-      await admin.from('alert_notifications').insert({
-        alert_id: alert.id,
-        client_id: alert.client_id,
-        organization_id: alert.organization_id,
-        message,
-        metric_value: metricValue,
-      });
+      const { data: notif } = await admin
+        .from('alert_notifications')
+        .insert({
+          alert_id: alert.id,
+          client_id: alert.client_id,
+          organization_id: alert.organization_id,
+          message,
+          metric_value: metricValue,
+        })
+        .select('id')
+        .single();
+      notificationId = notif?.id ?? null;
     }
 
     // Enviar mail si hay RESEND_API_KEY configurado
@@ -200,15 +214,12 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
           });
         }
 
-        if (recipients.length > 0) {
+        if (recipients.length > 0 && notificationId) {
           // Marcar email como enviado en la notificación recién creada
           await admin
             .from('alert_notifications')
             .update({ email_sent: true })
-            .eq('alert_id', alert.id)
-            .eq('email_sent', false)
-            .order('created_at', { ascending: false })
-            .limit(1);
+            .eq('id', notificationId);
         }
       } catch (emailErr: any) {
         console.error(`[alerts] Error enviando mail para alerta ${alert.id}:`, emailErr.message);
