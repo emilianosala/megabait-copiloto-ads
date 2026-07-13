@@ -19,15 +19,28 @@ export interface MetaInsights {
   actions?: Array<{ action_type: string; value: string }>;
 }
 
+// Meta devuelve code 190 (OAuthException) cuando el token expiró, fue revocado
+// o es inválido. El token de larga duración dura ~60 días y no hay refresh: al
+// vencer, Jair fallaba con un mensaje técnico de la Graph API. Lo traducimos a
+// algo accionable para el analista, y como todas las llamadas a Meta pasan por
+// estas funciones, el mensaje queda consistente en chat, cuentas y alertas.
+function assertMetaOk(res: Response, data: any, fallback: string): void {
+  if (res.ok && !data?.error) return;
+  if (data?.error?.code === 190) {
+    throw new Error(
+      'El token de Meta Ads expiró o es inválido. Reconectá Meta Ads desde la edición del cliente.',
+    );
+  }
+  throw new Error(data?.error?.message || fallback);
+}
+
 export async function getAdAccounts(accessToken: string): Promise<MetaAdAccount[]> {
   const res = await fetch(
     `${META_API_BASE}/me/adaccounts?fields=id,name,currency,account_status&access_token=${accessToken}`
   );
   const data = await res.json();
 
-  if (!res.ok || data.error) {
-    throw new Error(data.error?.message || 'Error al obtener cuentas de Meta Ads');
-  }
+  assertMetaOk(res, data, 'Error al obtener cuentas de Meta Ads');
 
   return data.data;
 }
@@ -50,9 +63,7 @@ export async function getAccountInsights(
   const res = await fetch(`${META_API_BASE}/${adAccountId}/insights?${params.toString()}`);
   const data = await res.json();
 
-  if (!res.ok || data.error) {
-    throw new Error(data.error?.message || 'Error al obtener métricas de Meta Ads');
-  }
+  assertMetaOk(res, data, 'Error al obtener métricas de Meta Ads');
 
   return data.data?.[0] || null;
 }
@@ -90,9 +101,7 @@ export async function getCampaigns(
     JSON.stringify(data).slice(0, 600),
   );
 
-  if (!res.ok || data.error) {
-    throw new Error(data.error?.message || 'Error al obtener campañas de Meta Ads');
-  }
+  assertMetaOk(res, data, 'Error al obtener campañas de Meta Ads');
 
   return data.data;
 }
