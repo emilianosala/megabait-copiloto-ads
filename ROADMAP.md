@@ -588,6 +588,28 @@ Emiliano (dueño del producto) es no-técnico y quiere entender cómo funciona t
 
 ---
 
+## 📋 P19 — Métricas por día (series de tiempo)
+
+Hoy las tools de Meta/Google devuelven totales acumulados de un período. Falta el **desglose diario** (gasto/clics/conversiones por día), necesario para:
+- Gráficos de evolución en los reportes (P7 ya renderiza charts con Recharts; esto es la fuente de datos que falta).
+- Detectar cuándo se cortó o arrancó el gasto de una campaña.
+
+Alcance: tool de métricas diarias en Meta (`time_increment=1`) y Google (`segments.date`), a nivel cuenta por defecto y por campaña si se pasa un `campaign_id`. Cap de período para no inflar el contexto del modelo.
+
+---
+
+## 📋 P20 — Playbooks de análisis (de análisis de competencia SaleADS)
+
+Empaquetar el criterio analítico ya codificado (los 8 principios del system prompt) en **flujos con nombre que el analista invoca**: "auditoría de fatiga creativa", "diagnóstico de atribución Meta vs GA4", etc. Jair ejecuta una secuencia definida de chequeos y devuelve un diagnóstico estructurado.
+
+- **Por qué:** refuerza el pilar #3 (criterio analítico codificado) y es el anti-"campañas en 52 segundos" de la competencia — no ejecutamos rápido, diagnosticamos con criterio.
+- **Esfuerzo:** bajo — el conocimiento ya existe en Jair; es empaquetarlo (prompt + disparador en la UI).
+- **Origen:** análisis de competidor en `docs/analisis-competencia-saleads.md`. Candidato #1 post-pilot.
+
+**Nota de posicionamiento (del mismo análisis):** *"No te prometemos 18x ROAS. Te mostramos tu ROAS real."* — diferenciación honesta para el marketing (P14), refuerza el pilar #4.
+
+---
+
 ## Notas técnicas
 
 - **CSS Modules en todo el proyecto** — no usar Tailwind

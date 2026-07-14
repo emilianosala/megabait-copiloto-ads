@@ -2,9 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { anthropic } from '@/lib/anthropic';
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
-import { getGoogleCampaigns, getGoogleCampaignDetail } from '@/lib/google-ads';
+import { getGoogleCampaigns, getGoogleCampaignDetail, getDailyMetrics } from '@/lib/google-ads';
 import { getGA4Metrics, GA4_METRICS, GA4_DIMENSIONS } from '@/lib/google-analytics';
-import { getAccountInsights, getCampaigns } from '@/lib/meta-ads';
+import { getAccountInsights, getCampaigns, getDailyInsights } from '@/lib/meta-ads';
 import { logApiCall } from '@/lib/api-audit';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { getUserOrgId } from '@/lib/organizations';
@@ -73,6 +73,35 @@ Incluye campañas activas y pausadas. Períodos disponibles igual que get_meta_a
         until: {
           type: 'string',
           description: 'Fecha de fin en formato YYYY-MM-DD.',
+        },
+      },
+    },
+  },
+  {
+    name: 'get_meta_daily_metrics',
+    description: `Obtiene métricas de Meta Ads con desglose POR DÍA (una fila por día): fecha, gasto, impresiones, clics.
+Usá esta tool cuando el analista pida la evolución en el tiempo, un gráfico de gasto diario, o para ubicar cuándo arrancó o se cortó el gasto.
+Por defecto es a nivel cuenta. Si querés el detalle de una campaña puntual, pasá campaign_id (obtenido de get_meta_campaigns).
+Evitá períodos muy largos junto con campaign_id para no traer demasiadas filas.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        date_preset: {
+          type: 'string',
+          description: 'Período predefinido. Ignorar si se usan since/until.',
+          enum: DATE_PRESETS,
+        },
+        since: {
+          type: 'string',
+          description: 'Fecha de inicio en formato YYYY-MM-DD. Usar junto con until.',
+        },
+        until: {
+          type: 'string',
+          description: 'Fecha de fin en formato YYYY-MM-DD. Usar junto con since.',
+        },
+        campaign_id: {
+          type: 'string',
+          description: 'Opcional. Id de campaña (de get_meta_campaigns) para el desglose diario de esa campaña; si se omite, es a nivel cuenta.',
         },
       },
     },
@@ -174,6 +203,7 @@ async function executeMetaTool(
       if (!campaigns.length) return 'No hay campañas disponibles para el período seleccionado.';
 
       const result = campaigns.map((c) => ({
+        id: c.id,
         nombre: c.name,
         estado: c.status,
         objetivo: c.objective,
@@ -184,6 +214,22 @@ async function executeMetaTool(
       }));
 
       return JSON.stringify(result);
+    }
+
+    if (toolName === 'get_meta_daily_metrics') {
+      const objectId = toolInput.campaign_id || adAccountId;
+      const daily = await getDailyInsights(accessToken, objectId, datePreset, timeRange);
+
+      await logApiCall({
+        userId, clientId, organizationId,
+        platform: 'meta', toolName,
+        endpoint: `${objectId}/insights?time_increment=1`,
+        requestParams: { datePreset, timeRange: timeRange ?? null, campaign_id: toolInput.campaign_id ?? null },
+        responseOk: true,
+      });
+
+      if (!daily.length) return 'No hay datos diarios para el período seleccionado.';
+      return JSON.stringify(daily);
     }
 
     return 'Tool no reconocida.';
@@ -266,6 +312,29 @@ Requiere el campaign_id obtenido de get_google_campaigns.`,
       required: ['campaign_id'],
     },
   },
+  {
+    name: 'get_google_daily_metrics',
+    description: `Obtiene métricas de Google Ads con desglose POR DÍA (una fila por día): fecha, gasto (cost), clics, conversiones.
+Usá esta tool cuando el analista pida la evolución en el tiempo, un gráfico de gasto diario, o para ubicar cuándo arrancó o se cortó el gasto.
+Por defecto suma todas las campañas por día (nivel cuenta). Si querés el detalle de una campaña puntual, pasá campaign_id (de get_google_campaigns).
+Evitá períodos muy largos junto con campaign_id para no traer demasiadas filas.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        date_preset: {
+          type: 'string',
+          enum: GOOGLE_DATE_PRESETS,
+          description: 'Período para las métricas. Default: last_30d.',
+        },
+        since: { type: 'string', description: 'Fecha inicio YYYY-MM-DD. Usar junto con until.' },
+        until: { type: 'string', description: 'Fecha fin YYYY-MM-DD. Usar junto con since.' },
+        campaign_id: {
+          type: 'string',
+          description: 'Opcional. Id de campaña (de get_google_campaigns) para el desglose diario de esa campaña; si se omite, es a nivel cuenta.',
+        },
+      },
+    },
+  },
 ];
 
 async function executeGoogleAdsTool(
@@ -312,6 +381,21 @@ async function executeGoogleAdsTool(
       });
 
       return JSON.stringify(detail);
+    }
+
+    if (toolName === 'get_google_daily_metrics') {
+      const daily = await getDailyMetrics(accountId, refreshToken, date_preset, since, until, campaign_id);
+
+      await logApiCall({
+        userId, clientId, organizationId,
+        platform: 'google', toolName,
+        endpoint: `customers/${accountId}/googleAds:searchStream`,
+        requestParams: { date_preset: date_preset ?? 'last_30d', since, until, campaign_id: campaign_id ?? null },
+        responseOk: true,
+      });
+
+      if (!daily.length) return JSON.stringify({ mensaje: 'No hay datos diarios para el período seleccionado.' });
+      return JSON.stringify(daily);
     }
 
     return JSON.stringify({ error: 'Tool no reconocida.' });
@@ -1163,7 +1247,7 @@ El analista NO conoce la implementación interna del sistema. **Nunca** le menci
 
 ## Meta Ads
 ${hasMetaAds ? `
-Conectado. Tools disponibles: **get_meta_account_insights** (métricas agregadas de la cuenta) y **get_meta_campaigns** (lista de campañas con métricas individuales).` : `
+Conectado. Tools disponibles: **get_meta_account_insights** (métricas agregadas de la cuenta), **get_meta_campaigns** (lista de campañas con métricas individuales) y **get_meta_daily_metrics** (desglose día por día — para ver evolución, armar gráficos o ubicar cuándo arrancó/se cortó el gasto; a nivel cuenta o de una campaña con campaign_id).` : `
 **No conectado.** Si la conversación requiere datos de Meta, recomendá conectar la cuenta desde el dashboard. No inventes métricas.`}
 
 ## Google Ads
@@ -1171,6 +1255,7 @@ ${hasGoogleAds ? `
 Conectado. Tools disponibles:
 - **get_google_campaigns**: lista todas las campañas incluyendo las pausadas, con configuración (estrategia de puja, presupuesto diario, tipo de canal) y métricas del período. Ideal para revisión inicial y diagnóstico.
 - **get_google_campaign_detail**: detalle de una campaña específica — ad groups, keywords (con quality score), y resumen de anuncios. Requiere el campaign_id de get_google_campaigns.
+- **get_google_daily_metrics**: desglose día por día (gasto/clics/conversiones) para ver evolución en el tiempo o graficar. A nivel cuenta por defecto; pasá campaign_id para una campaña puntual.
 
 Flujo sugerido: get_google_campaigns → identificar campaña de interés → get_google_campaign_detail para profundizar.` : `
 **No conectado** o Developer Token pendiente. Si el analista quiere analizar Google Ads, necesita reconectar la cuenta desde el dashboard una vez que el Developer Token esté configurado.`}

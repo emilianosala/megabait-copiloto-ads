@@ -116,6 +116,62 @@ export async function getGoogleCampaigns(
   }));
 }
 
+// ── Métricas por día ──────────────────────────────────────────────────────────
+
+export interface GoogleDailyRow {
+  fecha: string;
+  cost: number;
+  clics: number;
+  conversiones: number;
+}
+
+// Gasto/clics/conversiones con desglose POR DÍA. A nivel cuenta suma todas las
+// campañas por fecha; si se pasa campaignId, acota a esa campaña. El monto ya
+// viene en la moneda de la cuenta (cost_micros/1e6), no en USD.
+export async function getDailyMetrics(
+  accountId: string,
+  refreshToken: string,
+  datePreset?: string,
+  since?: string,
+  until?: string,
+  campaignId?: string,
+): Promise<GoogleDailyRow[]> {
+  const googleAds = createGoogleAdsClient();
+  const customer = googleAds.Customer({ customer_id: accountId, refresh_token: refreshToken });
+  const dateClause = resolveGaqlDateClause(datePreset, since, until);
+  const campaignFilter = campaignId ? `AND campaign.id = ${campaignId}` : '';
+
+  const rows = await customer.query<Array<{
+    segments: { date: string };
+    metrics: { cost_micros: number; clicks: number; conversions: number };
+  }>>(`
+    SELECT segments.date, metrics.cost_micros, metrics.clicks, metrics.conversions
+    FROM campaign
+    WHERE campaign.status != 'REMOVED'
+      AND segments.date ${dateClause}
+      ${campaignFilter}
+    ORDER BY segments.date
+  `);
+
+  // La query devuelve una fila por campaña por fecha; agregamos por fecha.
+  const byDate = new Map<string, GoogleDailyRow>();
+  for (const r of rows) {
+    const fecha = r.segments.date;
+    const row = byDate.get(fecha) ?? { fecha, cost: 0, clics: 0, conversiones: 0 };
+    row.cost += (r.metrics.cost_micros ?? 0) / 1_000_000;
+    row.clics += r.metrics.clicks ?? 0;
+    row.conversiones += r.metrics.conversions ?? 0;
+    byDate.set(fecha, row);
+  }
+
+  return Array.from(byDate.values()).map((r) => ({
+    fecha: r.fecha,
+    cost: parseFloat(r.cost.toFixed(2)),
+    clics: r.clics,
+    conversiones: parseFloat(r.conversiones.toFixed(2)),
+  }));
+}
+
 // ── Detalle de campaña ────────────────────────────────────────────────────────
 
 interface AdGroupRow {

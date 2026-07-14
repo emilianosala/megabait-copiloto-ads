@@ -105,3 +105,43 @@ export async function getCampaigns(
 
   return data.data;
 }
+
+export interface MetaDailyRow {
+  fecha: string;
+  gasto: string;
+  impresiones: number;
+  clics: number;
+}
+
+// Métricas con desglose POR DÍA (time_increment=1). Sirve para gráficos de
+// evolución y para ubicar cuándo se cortó o arrancó el gasto. objectId puede
+// ser la cuenta (act_...) o el id de una campaña — /insights funciona en ambos.
+export async function getDailyInsights(
+  accessToken: string,
+  objectId: string,
+  datePreset: string = 'last_30d',
+  timeRange?: { since: string; until: string },
+): Promise<MetaDailyRow[]> {
+  const params = new URLSearchParams({
+    fields: 'spend,impressions,clicks',
+    time_increment: '1',
+    access_token: accessToken,
+  });
+
+  if (timeRange) params.append('time_range', JSON.stringify(timeRange));
+  else params.append('date_preset', datePreset);
+
+  const res = await fetch(`${META_API_BASE}/${objectId}/insights?${params.toString()}`, {
+    signal: AbortSignal.timeout(30_000),
+  });
+  const data = await res.json();
+
+  assertMetaOk(res, data, 'Error al obtener métricas diarias de Meta Ads');
+
+  return (data.data ?? []).map((r: any) => ({
+    fecha: r.date_start,
+    gasto: parseFloat(r.spend ?? '0').toFixed(2),
+    impresiones: parseInt(r.impressions ?? '0'),
+    clics: parseInt(r.clicks ?? '0'),
+  }));
+}
