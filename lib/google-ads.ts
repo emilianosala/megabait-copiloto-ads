@@ -59,13 +59,13 @@ export interface GoogleCampaign {
   status: string;
   channel_type: string;
   bidding_strategy: string;
-  daily_budget_usd: number;
+  daily_budget: number;
   impressions: number;
   clicks: number;
-  cost_usd: number;
+  cost: number;
   conversions: number;
   ctr_percent: number;
-  avg_cpc_usd: number;
+  avg_cpc: number;
 }
 
 export async function getGoogleCampaigns(
@@ -106,13 +106,13 @@ export async function getGoogleCampaigns(
     status: r.campaign.status,
     channel_type: r.campaign.advertising_channel_type,
     bidding_strategy: r.campaign.bidding_strategy_type,
-    daily_budget_usd: (r.campaign_budget?.amount_micros ?? 0) / 1_000_000,
+    daily_budget: (r.campaign_budget?.amount_micros ?? 0) / 1_000_000,
     impressions: r.metrics.impressions ?? 0,
     clicks: r.metrics.clicks ?? 0,
-    cost_usd: (r.metrics.cost_micros ?? 0) / 1_000_000,
+    cost: (r.metrics.cost_micros ?? 0) / 1_000_000,
     conversions: r.metrics.conversions ?? 0,
     ctr_percent: parseFloat(((r.metrics.ctr ?? 0) * 100).toFixed(2)),
-    avg_cpc_usd: (r.metrics.average_cpc ?? 0) / 1_000_000,
+    avg_cpc: (r.metrics.average_cpc ?? 0) / 1_000_000,
   }));
 }
 
@@ -168,10 +168,10 @@ export interface GoogleCampaignDetail {
     name: string;
     status: string;
     type: string;
-    max_cpc_usd: number;
+    max_cpc: number;
     impressions: number;
     clicks: number;
-    cost_usd: number;
+    cost: number;
     conversions: number;
   }>;
   top_keywords: Array<{
@@ -181,7 +181,7 @@ export interface GoogleCampaignDetail {
     quality_score: number | null;
     impressions: number;
     clicks: number;
-    avg_cpc_usd: number;
+    avg_cpc: number;
   }>;
   ads_summary: {
     total: number;
@@ -263,10 +263,10 @@ export async function getGoogleCampaignDetail(
       name: r.ad_group.name,
       status: r.ad_group.status,
       type: r.ad_group.type,
-      max_cpc_usd: (r.ad_group.cpc_bid_micros ?? 0) / 1_000_000,
+      max_cpc: (r.ad_group.cpc_bid_micros ?? 0) / 1_000_000,
       impressions: r.metrics.impressions ?? 0,
       clicks: r.metrics.clicks ?? 0,
-      cost_usd: (r.metrics.cost_micros ?? 0) / 1_000_000,
+      cost: (r.metrics.cost_micros ?? 0) / 1_000_000,
       conversions: r.metrics.conversions ?? 0,
     })),
     top_keywords: keywordRows.map((r) => ({
@@ -276,7 +276,7 @@ export async function getGoogleCampaignDetail(
       quality_score: r.ad_group_criterion.quality_info?.quality_score ?? null,
       impressions: r.metrics.impressions ?? 0,
       clicks: r.metrics.clicks ?? 0,
-      avg_cpc_usd: (r.metrics.average_cpc ?? 0) / 1_000_000,
+      avg_cpc: (r.metrics.average_cpc ?? 0) / 1_000_000,
     })),
     ads_summary: {
       total: adRows.length,

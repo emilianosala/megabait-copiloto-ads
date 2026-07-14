@@ -137,9 +137,9 @@ async function executeMetaTool(
         impresiones: parseInt(insights.impressions),
         alcance: parseInt(insights.reach),
         clics: parseInt(insights.clicks),
-        gasto_usd: parseFloat(insights.spend).toFixed(2),
+        gasto: parseFloat(insights.spend).toFixed(2),
         ctr_porcentaje: parseFloat(insights.ctr).toFixed(2),
-        cpc_usd: parseFloat(insights.cpc).toFixed(2),
+        cpc: parseFloat(insights.cpc).toFixed(2),
         conversiones_compras: conversions.toFixed(0),
       });
     }
@@ -179,7 +179,7 @@ async function executeMetaTool(
         objetivo: c.objective,
         impresiones: parseInt(c.insights?.data?.[0]?.impressions ?? '0'),
         clics: parseInt(c.insights?.data?.[0]?.clicks ?? '0'),
-        gasto_usd: parseFloat(c.insights?.data?.[0]?.spend ?? '0').toFixed(2),
+        gasto: parseFloat(c.insights?.data?.[0]?.spend ?? '0').toFixed(2),
         ctr: parseFloat(c.insights?.data?.[0]?.ctr ?? '0').toFixed(2),
       }));
 

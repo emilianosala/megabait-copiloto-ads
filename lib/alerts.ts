@@ -113,10 +113,10 @@ export async function checkAndFireAlerts(baseUrl: string): Promise<{ checked: nu
 
         if (!campaigns.length) continue;
 
-        // c.cost_usd es un nombre engañoso: cost_micros/1e6 ya viene en la
-        // moneda de la cuenta, no en USD. Etiquetamos con la moneda real.
+        // c.cost ya viene en la moneda de la cuenta (cost_micros/1e6), no en USD.
+        // Etiquetamos con la moneda real.
         const cur = client.google_ads_currency ? ` ${client.google_ads_currency}` : '';
-        const totalCost = campaigns.reduce((acc, c) => acc + c.cost_usd, 0);
+        const totalCost = campaigns.reduce((acc, c) => acc + c.cost, 0);
         const totalConversions = campaigns.reduce((acc, c) => acc + c.conversions, 0);
         const totalClicks = campaigns.reduce((acc, c) => acc + c.clicks, 0);
         const totalImpressions = campaigns.reduce((acc, c) => acc + c.impressions, 0);
