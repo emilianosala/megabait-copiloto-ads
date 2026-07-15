@@ -139,3 +139,70 @@ export async function getGA4Metrics(
     row_count: data.rowCount ?? rows.length,
   };
 }
+
+// ── Configuración de la propiedad (Admin API) ─────────────────────────────────
+
+const GA4_ADMIN_API_BASE = 'https://analyticsadmin.googleapis.com/v1beta';
+
+export interface GA4Config {
+  property_id: string;
+  key_events: Array<{ event_name: string; counting_method: string; custom: boolean; created: string }>;
+  google_ads_links: Array<{ customer_id: string; ads_personalization_enabled: boolean; created: string }>;
+  data_streams: Array<{ type: string; display_name: string; measurement_id: string }>;
+}
+
+// Lee la CONFIGURACIÓN de la propiedad GA4 (no las métricas): qué eventos están
+// marcados como conversión (keyEvents), el link con Google Ads (si las
+// conversiones se importan a Ads), y los data streams (con su measurement id).
+// Sirve para AUDITAR si el tracking de conversiones está bien puesto. El scope
+// analytics.readonly (que ya usa el Data API) cubre también estas lecturas —
+// no requiere un permiso extra ni reconexión.
+export async function getGA4Config(
+  propertyId: string,
+  refreshToken: string,
+): Promise<GA4Config> {
+  const oauth2Client = createOAuthClient();
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+  const { token: accessToken } = await oauth2Client.getAccessToken();
+
+  if (!accessToken) throw new Error('No se pudo obtener el access token de Google');
+
+  const get = async (resource: string): Promise<any> => {
+    const res = await fetch(`${GA4_ADMIN_API_BASE}/properties/${propertyId}/${resource}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const msg = data.error?.message ?? `HTTP ${res.status}`;
+      throw new Error(`GA4 Admin API error (${resource}): ${msg}`);
+    }
+    return data;
+  };
+
+  const [keyEvents, adsLinks, streams] = await Promise.all([
+    get('keyEvents'),
+    get('googleAdsLinks'),
+    get('dataStreams'),
+  ]);
+
+  return {
+    property_id: propertyId,
+    key_events: (keyEvents.keyEvents ?? []).map((k: any) => ({
+      event_name: k.eventName ?? '',
+      counting_method: k.countingMethod ?? '',
+      custom: k.custom ?? false,
+      created: k.createTime ?? '',
+    })),
+    google_ads_links: (adsLinks.googleAdsLinks ?? []).map((l: any) => ({
+      customer_id: l.customerId ?? '',
+      ads_personalization_enabled: l.adsPersonalizationEnabled ?? false,
+      created: l.createTime ?? '',
+    })),
+    data_streams: (streams.dataStreams ?? []).map((s: any) => ({
+      type: s.type ?? '',
+      display_name: s.displayName ?? '',
+      measurement_id: s.webStreamData?.measurementId ?? '',
+    })),
+  };
+}

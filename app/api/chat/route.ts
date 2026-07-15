@@ -3,7 +3,7 @@ import { anthropic } from '@/lib/anthropic';
 import { createSupabaseServer } from '@/lib/supabase-server';
 import { createSupabaseAdmin } from '@/lib/supabase-admin';
 import { getGoogleCampaigns, getGoogleCampaignDetail, getDailyMetrics } from '@/lib/google-ads';
-import { getGA4Metrics, GA4_METRICS, GA4_DIMENSIONS } from '@/lib/google-analytics';
+import { getGA4Metrics, getGA4Config, GA4_METRICS, GA4_DIMENSIONS } from '@/lib/google-analytics';
 import { getAccountInsights, getCampaigns, getDailyInsights } from '@/lib/meta-ads';
 import { logApiCall } from '@/lib/api-audit';
 import { checkRateLimit } from '@/lib/rate-limiter';
@@ -453,6 +453,61 @@ Para dispositivos: dimensions=['deviceCategory'], metrics=['sessions','bounceRat
     },
   },
 };
+
+const GA4_CONFIG_TOOL: Anthropic.Tool = {
+  name: 'get_ga4_config',
+  description: `Lee la CONFIGURACIÓN de la propiedad de GA4 (no las métricas): qué eventos están marcados como conversión (key events), el link con Google Ads (si las conversiones se importan a Ads), y los data streams (con su measurement id).
+Usá esta tool para AUDITAR si el tracking de conversiones está bien configurado. Casos típicos:
+- El analista sospecha que las conversiones no están bien puestas o no se importan a Google Ads.
+- Hay discrepancia entre las conversiones que reporta Google Ads y las de GA4 (esta tool te dice si el link a Ads existe y qué eventos son conversión).
+- Antes de diagnosticar un problema de conversiones, revisá qué eventos son key events y si el link a Ads está.
+Es solo lectura — no modifica nada. Configurar conversiones es una acción manual del analista; vos diagnosticás y guiás.`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {},
+  },
+};
+
+async function executeGA4ConfigTool(
+  propertyId: string,
+  refreshToken: string,
+  userId: string,
+  clientId: string,
+  organizationId: string,
+): Promise<string> {
+  const rateLimitError = await checkRateLimit(organizationId, 'google');
+  if (rateLimitError) return JSON.stringify({ error: rateLimitError });
+
+  try {
+    const config = await getGA4Config(propertyId, refreshToken);
+
+    await logApiCall({
+      userId, clientId, organizationId,
+      platform: 'google', toolName: 'get_ga4_config',
+      endpoint: `properties/${propertyId} (admin: keyEvents/googleAdsLinks/dataStreams)`,
+      requestParams: {},
+      responseOk: true,
+    });
+
+    return JSON.stringify(config);
+  } catch (err: any) {
+    console.error('[GA4 Config Tool] Error:', err);
+    await logApiCall({
+      userId, clientId, organizationId,
+      platform: 'google', toolName: 'get_ga4_config',
+      endpoint: `properties/${propertyId} (admin)`,
+      responseOk: false,
+      errorMessage: err.message || 'Error desconocido',
+    });
+
+    if (err.message?.includes('PERMISSION_DENIED') || err.message?.includes('403')) {
+      return JSON.stringify({
+        error: 'Sin permisos para leer la configuración de GA4. El cliente necesita reconectar su cuenta de Google desde la edición para incluir el scope de Analytics.',
+      });
+    }
+    return JSON.stringify({ error: err.message || 'Error al leer la configuración de GA4' });
+  }
+}
 
 async function executeGA4Tool(
   toolInput: Record<string, any>,
@@ -1262,7 +1317,7 @@ Flujo sugerido: get_google_campaigns → identificar campaña de interés → ge
 
 ## Google Analytics (GA4)
 ${hasGA4 ? `
-Conectado. Tool disponible: **get_ga4_metrics** para datos del sitio web — sesiones, usuarios, tasas de conversión, canales de tráfico.
+Conectado. Tools disponibles: **get_ga4_metrics** (datos del sitio web — sesiones, usuarios, conversiones, canales de tráfico) y **get_ga4_config** (configuración de la propiedad — qué eventos son conversión, el link con Google Ads, los data streams — para auditar si el tracking de conversiones está bien puesto).
 
 Usá esta tool para cruzar tráfico web con gasto en ads: ¿las campañas llevan tráfico real? ¿Qué canal convierte mejor? ¿La landing page tiene bounce rate alto?
 
@@ -1354,7 +1409,7 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
   const tools: Anthropic.Tool[] = [
     ...(hasMetaAds ? META_ADS_TOOLS : []),
     ...(hasGoogleAds ? GOOGLE_ADS_TOOLS : []),
-    ...(hasGA4 ? [GA4_TOOL] : []),
+    ...(hasGA4 ? [GA4_TOOL, GA4_CONFIG_TOOL] : []),
     ...(hasSalesData ? [SALES_TOOL] : []),
     CREATE_REPORT_TOOL,
     ...ALERT_TOOLS,
@@ -1415,6 +1470,14 @@ Este cliente **no tiene datos de ventas reales** cargados todavía. Si el analis
           } else if (block.name === 'get_ga4_metrics') {
             result = await executeGA4Tool(
               block.input as Record<string, any>,
+              client.google_analytics_property_id,
+              googleRefreshToken!,
+              user.id,
+              client.id,
+              client.organization_id,
+            );
+          } else if (block.name === 'get_ga4_config') {
+            result = await executeGA4ConfigTool(
               client.google_analytics_property_id,
               googleRefreshToken!,
               user.id,
