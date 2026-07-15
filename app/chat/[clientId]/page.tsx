@@ -21,12 +21,52 @@ interface AttachedImage {
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  image?: AttachedImage;
+  images?: AttachedImage[];
 }
 
 // Máximo del lado largo al que reescalamos la captura antes de enviarla.
 // Mantiene el tamaño (y el costo en tokens) razonable y el texto legible.
 const MAX_IMAGE_EDGE = 1568;
+
+// Tope de capturas por mensaje. Limita el tamaño del request (Vercel corta
+// alrededor de 4.5 MB) y el costo en tokens de visión. Ajustable.
+const MAX_IMAGES = 5;
+
+// Palabras que rotan en el indicador "pensando" mientras Jair procesa.
+// Onda analista rosarino, sin forzar el modismo.
+const THINKING_WORDS = [
+  'Pensando',
+  'Cruzando números',
+  'Mirando la cuenta',
+  'Atando cabos',
+  'Rumiando',
+  'Sacando cuentas',
+  'Revisando campañas',
+  'Haciendo números',
+];
+
+// Indicador animado de "Jair está pensando": una palabra que rota cada par
+// de segundos + tres puntitos animados. Reemplaza al viejo "Escribiendo...".
+function ThinkingIndicator() {
+  const [i, setI] = useState(() => Math.floor(Math.random() * THINKING_WORDS.length));
+  useEffect(() => {
+    const id = setInterval(
+      () => setI((v) => (v + 1) % THINKING_WORDS.length),
+      2200,
+    );
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <p className={styles.typing}>
+      <span>{THINKING_WORDS[i]}</span>
+      <span className={styles.dots}>
+        <span />
+        <span />
+        <span />
+      </span>
+    </p>
+  );
+}
 
 export default function ChatPage() {
   const { clientId } = useParams();
@@ -36,13 +76,16 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [model, setModel] = useState(DEFAULT_CHAT_MODEL);
   const [loading, setLoading] = useState(false);
-  const [pendingImage, setPendingImage] = useState<
-    (AttachedImage & { preview: string }) | null
-  >(null);
+  const [pendingImages, setPendingImages] = useState<
+    (AttachedImage & { preview: string })[]
+  >([]);
+  const [listening, setListening] = useState(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     fetch(`/api/clients/${clientId}`)
@@ -57,6 +100,20 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Dictado por voz: usamos la Web Speech API nativa del navegador (sin backend).
+  // Solo está disponible en Chrome/Edge de escritorio; en otros navegadores
+  // escondemos el botón de micrófono.
+  useEffect(() => {
+    setVoiceSupported(
+      typeof window !== 'undefined' &&
+        !!((window as any).SpeechRecognition ||
+          (window as any).webkitSpeechRecognition),
+    );
+    return () => {
+      recognitionRef.current?.stop();
+    };
+  }, []);
 
   // Auto-resize del textarea según el contenido
   const resizeTextarea = () => {
@@ -119,47 +176,105 @@ export default function ChatPage() {
       reader.readAsDataURL(file);
     });
 
-  const attachImage = async (file: File | Blob) => {
+  // Adjunta una o varias imágenes a la vez, respetando el tope MAX_IMAGES.
+  const attachImages = async (files: (File | Blob)[]) => {
+    const room = MAX_IMAGES - pendingImages.length;
+    if (room <= 0) {
+      alert(`Podés adjuntar hasta ${MAX_IMAGES} capturas por mensaje.`);
+      return;
+    }
+    const slice = files.slice(0, room);
     try {
-      setPendingImage(await processImageFile(file));
+      const processed = await Promise.all(slice.map(processImageFile));
+      setPendingImages((prev) => [...prev, ...processed]);
+      if (files.length > room) {
+        alert(
+          `Se adjuntaron ${room}. El máximo es ${MAX_IMAGES} capturas por mensaje.`,
+        );
+      }
     } catch (err: any) {
       console.error('[chat] imagen:', err);
       alert(err.message || 'No se pudo adjuntar la imagen.');
     }
   };
 
+  const removeImage = (idx: number) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const item = Array.from(e.clipboardData.items).find((it) =>
-      it.type.startsWith('image/'),
-    );
-    if (!item) return; // Sin imagen: dejar el pegado de texto normal.
+    const files = Array.from(e.clipboardData.items)
+      .filter((it) => it.type.startsWith('image/'))
+      .map((it) => it.getAsFile())
+      .filter((f): f is File => !!f);
+    if (!files.length) return; // Sin imagen: dejar el pegado de texto normal.
     e.preventDefault();
-    const file = item.getAsFile();
-    if (file) attachImage(file);
+    attachImages(files);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = ''; // Permite volver a elegir el mismo archivo.
-    if (file) attachImage(file);
+    if (files.length) attachImages(files);
+  };
+
+  // Arranca/detiene el dictado por voz. Va agregando lo dictado al texto actual.
+  const toggleListening = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert('Tu navegador no soporta dictado por voz. Probá con Chrome.');
+      return;
+    }
+    const rec = new SR();
+    rec.lang = 'es-AR';
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    // Partimos de lo que ya haya escrito el usuario y le vamos sumando.
+    let base = input ? input + ' ' : '';
+    rec.onresult = (e: any) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) base += t;
+        else interim += t;
+      }
+      setInput(base + interim);
+      resizeTextarea();
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+    rec.start();
+    setListening(true);
   };
 
   const sendMessage = async () => {
-    if ((!input.trim() && !pendingImage) || loading) return;
+    if ((!input.trim() && pendingImages.length === 0) || loading) return;
+
+    // Si estaba dictando, cortamos el micrófono al enviar.
+    recognitionRef.current?.stop();
 
     const trimmedInput = input.trim();
-    const attached: AttachedImage | undefined = pendingImage
-      ? { mediaType: pendingImage.mediaType, data: pendingImage.data }
-      : undefined;
+    const attached: AttachedImage[] = pendingImages.map((p) => ({
+      mediaType: p.mediaType,
+      data: p.data,
+    }));
     const userMessage: Message = {
       role: 'user',
       content: trimmedInput,
-      ...(attached && { image: attached }),
+      ...(attached.length > 0 && { images: attached }),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
-    setPendingImage(null);
+    setPendingImages([]);
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -178,7 +293,7 @@ export default function ChatPage() {
           message: trimmedInput,
           history: messages,
           model,
-          image: attached ?? null,
+          images: attached,
         }),
         signal: controller.signal,
       });
@@ -301,50 +416,59 @@ export default function ChatPage() {
                 {msg.role === 'user' ? 'Vos' : 'Agente'}
               </span>
               <div className={styles.messageContent}>
-                {msg.image && (
+                {msg.images?.map((im, idx) => (
                   <img
+                    key={idx}
                     className={styles.messageImage}
-                    src={`data:${msg.image.mediaType};base64,${msg.image.data}`}
+                    src={`data:${im.mediaType};base64,${im.data}`}
                     alt="Captura adjunta"
                   />
-                )}
-                {msg.content && (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      a: ({ node, ...props }) => (
-                        <a {...props} target="_blank" rel="noopener noreferrer" />
-                      ),
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
-                )}
+                ))}
+                {msg.content &&
+                  (msg.role === 'user' ? (
+                    // Los mensajes del usuario se muestran como texto plano para
+                    // respetar los saltos de línea (Shift+Enter). Markdown se
+                    // comería un salto simple y quedaría "todo seguido".
+                    <p className={styles.userText}>{msg.content}</p>
+                  ) : (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ node, ...props }) => (
+                          <a {...props} target="_blank" rel="noopener noreferrer" />
+                        ),
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  ))}
               </div>
             </div>
           ))
         )}
 
         {/* Indicador de escritura: solo mientras espera el primer chunk */}
-        {loading && lastMessageIsUser && (
-          <p className={styles.typing}>Escribiendo...</p>
-        )}
+        {loading && lastMessageIsUser && <ThinkingIndicator />}
 
         <div ref={messagesEndRef} />
       </div>
 
       <div className={styles.inputArea}>
-        {pendingImage && (
-          <div className={styles.imagePreview}>
-            <img src={pendingImage.preview} alt="Vista previa de la captura" />
-            <button
-              type="button"
-              className={styles.imagePreviewRemove}
-              onClick={() => setPendingImage(null)}
-              title="Quitar captura"
-            >
-              ✕
-            </button>
+        {pendingImages.length > 0 && (
+          <div className={styles.imagePreviewRow}>
+            {pendingImages.map((img, idx) => (
+              <div key={idx} className={styles.imagePreview}>
+                <img src={img.preview} alt="Vista previa de la captura" />
+                <button
+                  type="button"
+                  className={styles.imagePreviewRemove}
+                  onClick={() => removeImage(idx)}
+                  title="Quitar captura"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
         )}
         <div className={styles.inputWrapper}>
@@ -352,6 +476,7 @@ export default function ChatPage() {
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            multiple
             onChange={handleFileChange}
             style={{ display: 'none' }}
           />
@@ -360,10 +485,21 @@ export default function ChatPage() {
             className={styles.attachButton}
             onClick={() => fileInputRef.current?.click()}
             disabled={loading}
-            title="Adjuntar una captura de pantalla"
+            title={`Adjuntar capturas de pantalla (hasta ${MAX_IMAGES})`}
           >
             📎
           </button>
+          {voiceSupported && (
+            <button
+              type="button"
+              className={`${styles.attachButton} ${listening ? styles.micActive : ''}`}
+              onClick={toggleListening}
+              disabled={loading}
+              title={listening ? 'Detener dictado' : 'Dictar por voz'}
+            >
+              {listening ? '⏹' : '🎤'}
+            </button>
+          )}
           <textarea
             ref={textareaRef}
             className={styles.input}
@@ -383,7 +519,7 @@ export default function ChatPage() {
             <button
               className={styles.sendButton}
               onClick={sendMessage}
-              disabled={!input.trim() && !pendingImage}
+              disabled={!input.trim() && pendingImages.length === 0}
             >
               Enviar
             </button>

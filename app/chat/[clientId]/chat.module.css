@@ -170,10 +170,57 @@
 }
 
 .typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: var(--text-muted);
   font-family: 'Space Mono', monospace;
   padding-left: 4px;
+}
+
+/* Tres puntitos que rebotan mientras Jair piensa */
+.dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: flex-end;
+  padding-bottom: 2px;
+}
+
+.dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: dotBounce 1.4s infinite ease-in-out both;
+}
+
+.dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dotBounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* Texto de los mensajes del usuario: respeta saltos de línea (Shift+Enter) */
+.userText {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .inputArea {
@@ -265,12 +312,36 @@
   cursor: not-allowed;
 }
 
+/* Micrófono activo (dictado por voz en curso): pulso rojo */
+.micActive {
+  border-color: var(--danger);
+  color: var(--danger);
+  animation: micPulse 1.3s infinite;
+}
+
+@keyframes micPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 82, 82, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(255, 82, 82, 0);
+  }
+}
+
+/* Fila de previews cuando hay varias capturas adjuntas */
+.imagePreviewRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: 760px;
+  margin: 0 auto 10px;
+}
+
 /* Vista previa de la captura antes de enviarla */
 .imagePreview {
   position: relative;
   display: inline-block;
-  max-width: 760px;
-  margin: 0 auto 10px;
   width: fit-content;
 }
 
