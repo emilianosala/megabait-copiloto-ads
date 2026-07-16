@@ -610,6 +610,31 @@ Empaquetar el criterio analítico ya codificado (los 8 principios del system pro
 
 ---
 
+## 📋 P21 — Arquitectura de conocimiento de dos niveles (evolución de P1)
+
+Engrosar el criterio analítico de Jair destilando un curso práctico, SIN inflar el system prompt. Notas completas en `docs/notas-framework-jair.md`.
+
+- **Nivel 1 (núcleo, siempre):** personalidad + principios transversales (~15-20 reglas máx).
+- **Nivel 2 (módulos bajo demanda):** markdown por tema (creativos, escalado, búsqueda, remarketing…) que Jair carga vía una tool `consultar_framework(tema)` — mismo patrón de Tool Use que ya usa. Se mejora editando markdown, sin deploy de código.
+- **Formato fijo por regla:** REGLA / CUÁNDO (umbrales concretos) / ACCIÓN / POR QUÉ / NO APLICA SI. El "no aplica si" es el campo de más valor (convierte regla de manual en criterio senior).
+- **Paso de reconciliación (agregado en review):** si una regla del curso choca con un principio de primer nivel (ej: significancia estadística), gana el principio o se marca el conflicto. No ingerir a ciegas.
+- **Tie-in con el programa de estudio:** es RAG aplicado a Jair (Fase 2) y se valida con evals (Fase 1) — ambos se refuerzan.
+- **Timing:** post-pilot. Disparador: que los analistas digan que los consejos son "muy genéricos". Preparar la arquitectura es barato; destilar el curso bien es lo caro.
+
+---
+
+## 📋 P22 — GA4 Admin API: auditoría de configuración de conversiones (extensión de P5)
+
+Hoy Jair lee MÉTRICAS de GA4 (Data API: sesiones, conversiones totales, canales). Falta leer la CONFIGURACIÓN (Admin API): qué eventos están marcados como conversión (`keyEvents`) y el estado del link GA4↔Google Ads. Con eso Jair puede **auditar** si las conversiones están bien configuradas, no solo inferirlo de los datos.
+
+- **Scope:** ya resuelto — `analytics.readonly` (que usa el Data API) cubre también las lecturas de la Admin API. NO requiere re-consentimiento ni reconexión.
+- **Alcance:** función que lea `keyEvents` + `googleAdsLinks` de la propiedad + tool `get_ga4_config` + describírsela a Jair. Mismo patrón que las tools actuales.
+- **Estimación:** ~medio día a un día (riesgo bajo, scope ya resuelto).
+- **NO incluye GTM** (diferido) ni escritura (Jair sigue read-only; configurar conversiones es P4).
+- **Origen:** pedido de un analista (config de conversiones en Google Ads) — potencial tester nuevo (vínculo con Mas Cuidados).
+
+---
+
 ## Notas técnicas
 
 - **CSS Modules en todo el proyecto** — no usar Tailwind
