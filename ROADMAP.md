@@ -187,9 +187,9 @@ La entidad dueña de los datos es la **organización** que paga la cuenta (agenc
 
 ---
 
-## 🔴 P0 — URGENTE: Seguridad
+## ✅ P0 — Seguridad: rotación de credenciales — COMPLETADO (julio 2026)
 
-Rotar credenciales expuestas en el breach de Vercel (abril 2026) y marcarlas como **Sensitive** (encriptadas, no legibles desde admin UI).
+Rotar credenciales expuestas en el breach de Vercel (abril 2026) y marcarlas como **Sensitive** (encriptadas, no legibles desde admin UI). **Hecho — se conserva la lista como registro del alcance.**
 
 Orden de rotación, de mayor a menor riesgo:
 1. `ANTHROPIC_API_KEY` → console.anthropic.com → API Keys → crear nueva → eliminar anterior
